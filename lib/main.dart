@@ -58,6 +58,13 @@ class _YoloDetectionPageState extends State<YoloDetectionPage> {
   double inferenceTime = 0;
   DateTime? lastInference;
   double confidenceThreshold = 0.4;
+  
+  // Prediction smoothing for stability
+  final Map<String, List<String>> _predictionHistory = {}; // Track recent predictions per detection
+  final int _smoothingWindow = 5; // Number of frames to average
+  final double _minClassifierConfidence = 0.6; // Minimum confidence to accept prediction
+  String? _lastStableLabel; // Last stable prediction
+  int _stableCount = 0; // Frames with same prediction
 
   @override
   void initState() {
@@ -308,15 +315,72 @@ class _YoloDetectionPageState extends State<YoloDetectionPage> {
           }
         }
 
-        final label = (classifierLabels.isNotEmpty && maxIdx < classifierLabels.length)
+        final rawLabel = (classifierLabels.isNotEmpty && maxIdx < classifierLabels.length)
             ? classifierLabels[maxIdx]
             : maxIdx.toString();
-        debugPrint('Classified: $label (conf: $maxVal)');
-        setState(() { d['classifier'] = label; });
+        
+        // Apply prediction smoothing for stability
+        final String stableLabel = _getSmoothedPrediction(rawLabel, maxVal);
+        
+        debugPrint('Classified: $rawLabel (conf: ${maxVal.toStringAsFixed(2)}) -> Stable: $stableLabel');
+        setState(() { d['classifier'] = stableLabel; d['classifierConf'] = maxVal; });
       } catch (e, st) {
         debugPrint('Classification error: $e\n$st');
       }
     }
+  }
+
+  // Smoothing function to stabilize predictions across frames
+  String _getSmoothedPrediction(String rawLabel, double confidence) {
+    // If confidence is too low, keep last stable prediction
+    if (confidence < _minClassifierConfidence && _lastStableLabel != null) {
+      return _lastStableLabel!;
+    }
+    
+    // Add to prediction history
+    const historyKey = 'main'; // Use single key for simplicity, or use detection ID for multi-face
+    _predictionHistory[historyKey] ??= [];
+    _predictionHistory[historyKey]!.add(rawLabel);
+    
+    // Keep only recent predictions
+    if (_predictionHistory[historyKey]!.length > _smoothingWindow) {
+      _predictionHistory[historyKey]!.removeAt(0);
+    }
+    
+    // Count occurrences (voting)
+    final counts = <String, int>{};
+    for (final pred in _predictionHistory[historyKey]!) {
+      counts[pred] = (counts[pred] ?? 0) + 1;
+    }
+    
+    // Find most common prediction
+    String mostCommon = rawLabel;
+    int maxCount = 0;
+    counts.forEach((label, count) {
+      if (count > maxCount) {
+        maxCount = count;
+        mostCommon = label;
+      }
+    });
+    
+    // Require majority (more than half) to change prediction
+    final threshold = (_smoothingWindow / 2).ceil();
+    if (maxCount >= threshold) {
+      if (mostCommon == _lastStableLabel) {
+        _stableCount++;
+      } else {
+        // Only switch if we've seen the new prediction consistently
+        if (_stableCount < 2 && _lastStableLabel != null) {
+          return _lastStableLabel!;
+        }
+        _stableCount = 1;
+      }
+      _lastStableLabel = mostCommon;
+      return mostCommon;
+    }
+    
+    // Not enough consensus, keep previous
+    return _lastStableLabel ?? rawLabel;
   }
 
   // Converts YUV420 camera image to `image` package RGB image (image v4 API).
