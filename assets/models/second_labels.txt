@@ -1,2 +1,7 @@
-female
-male
+0 Happy
+1 Sad
+2 Surprised
+3 Fearful
+4 Angry
+5 Disgusted
+6 Neutral
