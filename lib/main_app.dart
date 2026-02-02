@@ -1,5 +1,5 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'utils/constants.dart';
 import 'database/database_manager.dart';
 import 'screens/home_screen.dart';
 import 'screens/enrollment_screen.dart';
@@ -7,42 +7,44 @@ import 'screens/attendance_screen.dart';
 import 'screens/database_screen.dart';
 import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
-import 'utils/constants.dart';
-
-late DatabaseManager _dbManager;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize database
-  _dbManager = DatabaseManager();
-  await _dbManager.database;
-  
-  runApp(const FaceRecognitionApp());
+  final dbManager = DatabaseManager();
+  await dbManager.database; // Initialize database on app startup
+
+  runApp(FaceRecognitionApp(dbManager: dbManager));
 }
 
-class FaceRecognitionApp extends StatelessWidget {
-  const FaceRecognitionApp({Key? key}) : super(key: key);
+/// Main Application Widget
+class FaceRecognitionApp extends StatefulWidget {
+  final DatabaseManager dbManager;
+
+  const FaceRecognitionApp({
+    Key? key,
+    required this.dbManager,
+  }) : super(key: key);
+
+  @override
+  State<FaceRecognitionApp> createState() => _FaceRecognitionAppState();
+}
+
+class _FaceRecognitionAppState extends State<FaceRecognitionApp> {
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
       title: AppConstants.appName,
       theme: AppTheme.lightTheme,
-      builder: (context, child) {
-        final widget = child ?? const SizedBox.shrink();
-        return Container(
-          decoration: const BoxDecoration(gradient: AppConstants.backgroundGradient),
-          child: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-              child: widget,
-            ),
-          ),
-        );
-      },
-      initialRoute: AppConstants.routeHome,
+      debugShowCheckedModeBanner: false,
+      home: const HomeScreen(),
       routes: {
         AppConstants.routeHome: (context) => const HomeScreen(),
         AppConstants.routeEnroll: (context) => const EnrollmentScreen(),
@@ -52,5 +54,11 @@ class FaceRecognitionApp extends StatelessWidget {
         AppConstants.routeSettings: (context) => const SettingsScreen(),
       },
     );
+  }
+
+  @override
+  void dispose() {
+    widget.dbManager.close();
+    super.dispose();
   }
 }
