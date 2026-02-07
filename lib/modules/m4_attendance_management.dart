@@ -43,11 +43,11 @@ class AttendanceManagementModule {
 
     return AttendanceDetails(
       student: student,
-      totalClasses: stats['total_classes'] as int,
-      presentCount: stats['present'] as int,
-      absentCount: stats['absent'] as int,
-      lateCount: stats['late'] as int,
-      attendancePercentage: stats['attendance_percentage'] as double,
+      totalClasses: stats['total'] as int? ?? 0,
+      presentCount: stats['present'] as int? ?? 0,
+      absentCount: stats['absent'] as int? ?? 0,
+      lateCount: stats['late'] as int? ?? 0,
+      attendancePercentage: (stats['attendance_rate'] as double?) ?? 0.0,
       records: records,
     );
   }
@@ -94,21 +94,65 @@ class AttendanceManagementModule {
   /// Export attendance data as CSV format
   Future<String> exportAsCSV() async {
     final allStudents = await dbManager.getAllStudents();
+    final allRecords = await dbManager.getAllAttendance();
     final buffer = StringBuffer();
-    // Header - Attendance summary
-    buffer.writeln(
-      'Name,Roll Number,Class,Total Classes,Present,Absent,Late,Attendance %',
-    );
 
+    if (allStudents.isEmpty || allRecords.isEmpty) {
+      return 'No data to export';
+    }
+
+    // Get all unique dates and sort them
+    final dates = <DateTime>{};
+    for (final record in allRecords) {
+      dates.add(DateTime(record.date.year, record.date.month, record.date.day));
+    }
+    final sortedDates = dates.toList()..sort();
+
+    // Create header row with dates in DD/MM/YYYY format
+    final header = StringBuffer('Student Name');
+    for (final date in sortedDates) {
+      final formattedDate =
+          '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+      header.write(',$formattedDate');
+    }
+    header.write(',Total_Attended,Total_Absent');
+    buffer.writeln(header);
+
+    // Create a map for quick lookup of attendance status
+    final attendanceMap = <int, Map<DateTime, String>>{};
     for (final student in allStudents) {
-      final details = await getAttendanceDetails(student.id!);
-      if (details != null) {
-        buffer.writeln(
-          '${student.name},${student.rollNumber},${student.className},'
-          '${details.totalClasses},${details.presentCount},${details.absentCount},'
-          '${details.lateCount},${details.attendancePercentage.toStringAsFixed(2)}%',
-        );
+      attendanceMap[student.id!] = {};
+      for (final date in sortedDates) {
+        attendanceMap[student.id!]![date] = '0'; // Default to absent
       }
+    }
+
+    // Fill in the attendance data
+    for (final record in allRecords) {
+      final dateKey = DateTime(record.date.year, record.date.month, record.date.day);
+      if (attendanceMap[record.studentId] != null) {
+        attendanceMap[record.studentId]![dateKey] = 
+            record.status == AttendanceStatus.present ? '1' : '0';
+      }
+    }
+
+    // Write student rows
+    for (final student in allStudents) {
+      int attended = 0;
+      int absent = 0;
+      
+      final row = StringBuffer(student.name);
+      for (final date in sortedDates) {
+        final status = attendanceMap[student.id]?[date] ?? '0';
+        row.write(',$status');
+        if (status == '1') {
+          attended++;
+        } else {
+          absent++;
+        }
+      }
+      row.write(',$attended,$absent');
+      buffer.writeln(row);
     }
 
     return buffer.toString();
@@ -117,12 +161,16 @@ class AttendanceManagementModule {
   /// Export embeddings only as CSV
   Future<String> exportEmbeddingsCSV() async {
     final buffer = StringBuffer();
-    buffer.writeln('id,student_id,capture_date,dimension,vector');
+    buffer.writeln('id,student_id,student_name,capture_date,dimension,vector');
     final embeddings = await dbManager.getAllEmbeddings();
     for (final emb in embeddings) {
+      // Get student name for this embedding
+      final student = await dbManager.getStudentById(emb.studentId);
+      final studentName = student?.name ?? 'Unknown';
+      
       final vecStr = emb.vector.map((v) => v.toStringAsFixed(6)).join(';');
       buffer.writeln(
-        '${emb.id ?? ''},${emb.studentId},${emb.captureDate.toIso8601String()},${emb.dimension},"$vecStr"',
+        '${emb.id ?? ''},${emb.studentId},$studentName,${emb.captureDate.toIso8601String()},${emb.dimension},"$vecStr"',
       );
     }
     return buffer.toString();
@@ -176,8 +224,8 @@ class AttendanceManagementModule {
 
     for (final student in students) {
       final stats = await dbManager.getAttendanceStats(student.id!);
-      totalAttendanceRecords += stats['total_classes'] as int;
-      avgAttendance += stats['attendance_percentage'] as double;
+      totalAttendanceRecords += stats['total'] as int? ?? 0;
+      avgAttendance += stats['attendance_rate'] as double? ?? 0.0;
     }
 
     if (students.isNotEmpty) {

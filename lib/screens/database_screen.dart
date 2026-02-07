@@ -20,11 +20,12 @@ class _DatabaseScreenState extends State<DatabaseScreen>
   late Future<SystemStatistics> _systemStatsFuture;
   late Future<List<AttendanceDetails>> _studentDetailsFuture;
   late Future<List<DailyAttendanceEntry>> _todayEntriesFuture;
+  late Future<List<AttendanceDetails>> _enrolledStudentsFuture;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _dbManager = DatabaseManager();
     _attendanceModule = AttendanceManagementModule(_dbManager);
     _reloadData();
@@ -52,6 +53,7 @@ class _DatabaseScreenState extends State<DatabaseScreen>
           controller: _tabController,
           tabs: const [
             Tab(icon: Icon(Icons.bar_chart), text: 'Overview'),
+            Tab(icon: Icon(Icons.people), text: 'Enrolled'),
             Tab(icon: Icon(Icons.today), text: 'Today'),
           ],
         ),
@@ -60,7 +62,7 @@ class _DatabaseScreenState extends State<DatabaseScreen>
         decoration: const BoxDecoration(gradient: AppConstants.backgroundGradient),
         child: TabBarView(
           controller: _tabController,
-          children: [_buildOverviewTab(), _buildTodayTab()],
+          children: [_buildOverviewTab(), _buildEnrolledStudentsTab(), _buildTodayTab()],
         ),
       ),
     );
@@ -165,6 +167,134 @@ class _DatabaseScreenState extends State<DatabaseScreen>
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEnrolledStudentsTab() {
+    return FutureBuilder<List<AttendanceDetails>>(
+      future: _enrolledStudentsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final enrolledStudents = snapshot.data ?? [];
+        if (enrolledStudents.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(AppConstants.paddingLarge),
+            child: const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.person_add,
+                    size: 48,
+                    color: AppConstants.textTertiary,
+                  ),
+                  SizedBox(height: AppConstants.paddingMedium),
+                  Text('No enrolled students yet.'),
+                  SizedBox(height: AppConstants.paddingSmall),
+                  Text(
+                    'Students need to complete face enrollment first',
+                    style: TextStyle(color: AppConstants.textTertiary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        return ListView(
+          padding: const EdgeInsets.all(AppConstants.paddingMedium),
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppConstants.primaryColor.withAlpha(26),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.people,
+                    color: AppConstants.primaryColor,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: AppConstants.paddingMedium),
+                Text(
+                  'Enrolled Students (${enrolledStudents.length})',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppConstants.paddingMedium),
+            ...enrolledStudents
+                .map((detail) => _enrolledStudentCard(detail)),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _enrolledStudentCard(AttendanceDetails detail) {
+    final student = detail.student;
+    final ratio = detail.totalClasses > 0
+        ? '${detail.presentCount}/${detail.totalClasses}'
+        : '0/0';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    student.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: AppConstants.paddingSmall / 2),
+                  Text(
+                    'Roll: ${student.rollNumber} · Class: ${student.className}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: AppConstants.paddingSmall / 2),
+                  Text(
+                    'Enrolled: ${student.enrollmentDate.toLocal().toString().split(' ')[0]}',
+                    style: const TextStyle(fontSize: 12, color: AppConstants.textTertiary),
+                  ),
+                  const SizedBox(height: AppConstants.paddingSmall / 2),
+                  Text(
+                    'Attendance: $ratio (${detail.attendancePercentage.toStringAsFixed(1)}%)',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuButton<_StudentAction>(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'Student actions',
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: _StudentAction.deleteStudent,
+                  child: Text('Delete student'),
+                ),
+                const PopupMenuItem(
+                  value: _StudentAction.clearEmbeddings,
+                  child: Text('Clear embeddings'),
+                ),
+              ],
+              onSelected: (action) => _handleStudentAction(detail, action),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -506,21 +636,109 @@ class _DatabaseScreenState extends State<DatabaseScreen>
     setState(() {
       _systemStatsFuture = _attendanceModule.getSystemStatistics();
       _studentDetailsFuture = _loadStudentDetails();
+      _enrolledStudentsFuture = _loadEnrolledStudents();
       _todayEntriesFuture = _loadTodayEntries();
     });
   }
 
   Future<List<AttendanceDetails>> _loadStudentDetails() async {
-    final students = await _dbManager.getAllStudents();
-    final records = <AttendanceDetails>[];
-    for (final student in students) {
-      final detail = await _attendanceModule.getAttendanceDetails(student.id!);
-      if (detail != null) {
-        records.add(detail);
+    try {
+      final students = await _dbManager.getAllStudents();
+      print('📊 Overview: ${students.length} students found');
+      
+      final records = <AttendanceDetails>[];
+      for (final student in students) {
+        try {
+          final detail = await _attendanceModule.getAttendanceDetails(student.id!);
+          if (detail != null) {
+            records.add(detail);
+            print('   ✅ ${student.name}: ${detail.presentCount}/${detail.totalClasses}');
+          } else {
+            print('   ⚠️  ${student.name}: getAttendanceDetails returned null');
+            records.add(
+              AttendanceDetails(
+                student: student,
+                totalClasses: 0,
+                presentCount: 0,
+                absentCount: 0,
+                lateCount: 0,
+                attendancePercentage: 0.0,
+                records: [],
+              ),
+            );
+          }
+        } catch (e) {
+          print('   ❌ ${student.name}: $e');
+          records.add(
+            AttendanceDetails(
+              student: student,
+              totalClasses: 0,
+              presentCount: 0,
+              absentCount: 0,
+              lateCount: 0,
+              attendancePercentage: 0.0,
+              records: [],
+            ),
+          );
+        }
       }
+      records.sort((a, b) => a.student.name.compareTo(b.student.name));
+      print('✅ Loaded ${records.length} students for overview');
+      return records;
+    } catch (e) {
+      print('❌ Error in _loadStudentDetails: $e');
+      return [];
     }
-    records.sort((a, b) => a.student.name.compareTo(b.student.name));
-    return records;
+  }
+
+  Future<List<AttendanceDetails>> _loadEnrolledStudents() async {
+    try {
+      final enrolledStudents = await _dbManager.getEnrolledStudents();
+      print('👥 Enrolled: ${enrolledStudents.length} students found');
+      
+      final records = <AttendanceDetails>[];
+      for (final student in enrolledStudents) {
+        try {
+          final detail = await _attendanceModule.getAttendanceDetails(student.id!);
+          if (detail != null) {
+            records.add(detail);
+            print('   ✅ ${student.name}: enrolled');
+          } else {
+            print('   ⚠️  ${student.name}: getAttendanceDetails returned null');
+            records.add(
+              AttendanceDetails(
+                student: student,
+                totalClasses: 0,
+                presentCount: 0,
+                absentCount: 0,
+                lateCount: 0,
+                attendancePercentage: 0.0,
+                records: [],
+              ),
+            );
+          }
+        } catch (e) {
+          print('   ❌ ${student.name}: $e');
+          records.add(
+            AttendanceDetails(
+              student: student,
+              totalClasses: 0,
+              presentCount: 0,
+              absentCount: 0,
+              lateCount: 0,
+              attendancePercentage: 0.0,
+              records: [],
+            ),
+          );
+        }
+      }
+      records.sort((a, b) => a.student.name.compareTo(b.student.name));
+      print('✅ Loaded ${records.length} enrolled students');
+      return records;
+    } catch (e) {
+      print('❌ Error in _loadEnrolledStudents: $e');
+      return [];
+    }
   }
 
   Future<List<DailyAttendanceEntry>> _loadTodayEntries() async {

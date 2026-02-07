@@ -324,4 +324,23 @@ class DatabaseManager {
       db.faceEmbeddings,
     )..where((e) => e.studentId.equals(studentId))).go();
   }
+
+  /// Get all students who have embeddings (enrolled students)
+  Future<List<model.Student>> getEnrolledStudents() async {
+    final allEmbeddings = await getAllEmbeddings();
+    final uniqueStudentIds = <int>{};
+    for (final embedding in allEmbeddings) {
+      uniqueStudentIds.add(embedding.studentId);
+    }
+    
+    final enrolledStudents = <model.Student>[];
+    for (final studentId in uniqueStudentIds) {
+      final student = await getStudentById(studentId);
+      if (student != null) {
+        enrolledStudents.add(student);
+      }
+    }
+    
+    return enrolledStudents;
+  }
 }

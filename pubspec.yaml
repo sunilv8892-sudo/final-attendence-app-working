@@ -39,6 +39,7 @@ dependencies:
   tflite_flutter: ^0.11.0
   image: ^4.0.0
   shared_preferences: ^2.2.0
+  flutter_tts: ^4.2.5
   # SQLite with vector extension support
   sqlite3_flutter_libs: ^0.5.15
   drift: ^2.15.0

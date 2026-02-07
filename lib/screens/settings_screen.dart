@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
 import '../database/database_manager.dart';
 
@@ -14,6 +15,25 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final DatabaseManager _dbManager = DatabaseManager();
   double _similarityThreshold = AppConstants.similarityThreshold;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThreshold();
+  }
+
+  Future<void> _loadThreshold() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _similarityThreshold = prefs.getDouble('similarity_threshold') ?? AppConstants.similarityThreshold;
+    });
+  }
+
+  Future<void> _saveThreshold(double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('similarity_threshold', value);
+    debugPrint('💾 Saved similarity threshold: $value');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             divisions: 10,
                             onChanged: (value) {
                               setState(() => _similarityThreshold = value);
+                              _saveThreshold(value);
                             },
                           ),
                         ),

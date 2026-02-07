@@ -3,6 +3,8 @@ import 'package:camera/camera.dart';
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../database/database_manager.dart';
 import '../models/face_detection_model.dart';
 import '../models/student_model.dart';
@@ -22,6 +24,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   CameraController? _controller;
   late face_detection_module.FaceDetectionModule _faceDetector;
   late FaceEmbeddingModule _faceEmbedder;
+  late FlutterTts _flutterTts;
   List<CameraDescription> _availableCameras = [];
   late CameraDescription _currentCamera;
   late DatabaseManager _dbManager;
@@ -32,6 +35,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   bool _isScanning = false;
   final Map<int, AttendanceStatus> _attendanceStatus = {};
   DateTime? _attendanceDate;
+  double _similarityThreshold = 0.85;  // High threshold (85%) for max accuracy
+  final Map<int, DateTime> _lastDetectionTime = {}; // Prevent duplicate detections
+  static const Duration _detectionCooldown = Duration(seconds: 3);
+  
+  // Multiple consecutive detection tracking
+  int? _lastDetectedStudentId;
+  int _consecutiveDetections = 0;
+  static const int _requiredConsecutiveDetections = 3; // Require 3 consecutive matches for extra safety
 
   @override
   void initState() {
@@ -49,9 +60,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Future<void> _initialize() async {
     try {
+      // Load similarity threshold from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      _similarityThreshold = prefs.getDouble('similarity_threshold') ?? 0.85;
+      debugPrint('📊 Loaded similarity threshold: $_similarityThreshold');
+
       _dbManager = DatabaseManager();
       await _dbManager.database;
-
+      // Initialize text-to-speech
+      _flutterTts = FlutterTts();
+      await _flutterTts.setLanguage('en-US');
+      await _flutterTts.setSpeechRate(0.5);
+      await _flutterTts.setVolume(1.0);
+      await _flutterTts.setPitch(1.0);
+      debugPrint('🔊 Text-to-Speech initialized');
       // Initialize modules
       _faceDetector = face_detection_module.FaceDetectionModule();
       await _faceDetector.initialize();
@@ -166,42 +188,72 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         );
         final face = detections.first;
 
+        // Validate face size (must be at least 80x80)
+        if (face.width < 80 || face.height < 80) {
+          debugPrint('⚠️ Face too small: ${face.width.toInt()}x${face.height.toInt()}');
+          _consecutiveDetections = 0;
+          _lastDetectedStudentId = null;
+          if (mounted) setState(() {});
+          return;
+        }
+
         // Crop and generate embedding
         final croppedFace = _cropFace(rawImage, face);
         final embedding = await _generateEmbedding(croppedFace);
 
         if (embedding.isEmpty) {
           debugPrint('❌ Failed to generate embedding');
+          _consecutiveDetections = 0;
+          _lastDetectedStudentId = null;
+          if (mounted) setState(() {});
           return;
         }
 
-        // Find matching student
+        // Find matching student with similarity check
         final match = _findMatchingStudent(embedding);
         if (match != null) {
-          debugPrint('✅ Match found: ${match.name}');
-          if (mounted) {
-            setState(() {
-              _attendanceStatus[match.id!] = AttendanceStatus.present;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('✅ ${match.name} marked present'),
-                backgroundColor: Colors.green,
-                duration: const Duration(milliseconds: 800),
-              ),
-            );
+          // Check if it's the same person as last detection
+          if (match.id == _lastDetectedStudentId) {
+            _consecutiveDetections++;
+          } else {
+            // Different person, reset counter and start new sequence
+            _consecutiveDetections = 1;
+            _lastDetectedStudentId = match.id;
+          }
+
+          // If we have enough consecutive detections, mark attendance
+          if (_consecutiveDetections >= _requiredConsecutiveDetections) {
+            final now = DateTime.now();
+            final lastTime = _lastDetectionTime[match.id] ?? DateTime(2000);
+            
+            if (now.difference(lastTime) >= _detectionCooldown) {
+              debugPrint('✅ ${match.name} marked present (confirmed)');
+              _lastDetectionTime[match.id!] = now;
+              _consecutiveDetections = 0;
+              _lastDetectedStudentId = null;
+              
+              if (mounted) {
+                setState(() {
+                  _attendanceStatus[match.id!] = AttendanceStatus.present;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('✅ ${match.name} marked present'),
+                    backgroundColor: Colors.green,
+                    duration: const Duration(milliseconds: 800),
+                  ),
+                );
+                // Speak the attendance confirmation
+                _speakAttendanceConfirmation(match.name);
+              }
+            }
+          } else {
+            if (mounted) setState(() {});
           }
         } else {
-          debugPrint('❌ No matching student found');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('❌ No match found'),
-                backgroundColor: Colors.orange,
-                duration: Duration(milliseconds: 800),
-              ),
-            );
-          }
+          _consecutiveDetections = 0;
+          _lastDetectedStudentId = null;
+          if (mounted) setState(() {});
         }
       }
     } catch (e) {
@@ -273,6 +325,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
+  Future<void> _speakAttendanceConfirmation(String studentName) async {
+    try {
+      final message = "$studentName's attendance marked successfully";
+      await _flutterTts.speak(message);
+      debugPrint('🔊 Speaking: $message');
+    } catch (e) {
+      debugPrint('TTS error: $e');
+    }
+  }
+
   Student? _findMatchingStudent(List<double> embedding) {
     double bestSimilarity = 0.0;
     Student? bestMatch;
@@ -289,9 +351,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
 
     debugPrint(
-      '🔍 Best match: ${bestMatch?.name} (similarity: ${bestSimilarity.toStringAsFixed(3)})',
+      '🔍 Best match: ${bestMatch?.name} (similarity: ${bestSimilarity.toStringAsFixed(3)}) [threshold: ${_similarityThreshold.toStringAsFixed(2)}]',
     );
-    return bestSimilarity > 0.75 ? bestMatch : null;
+    return bestSimilarity > _similarityThreshold ? bestMatch : null;
   }
 
   double _cosineSimilarity(List<double> a, List<double> b) {
@@ -407,153 +469,165 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             // Camera Preview Section
             if (isReady)
               Expanded(
-                flex: 2,
-                child: Container(
-                  margin: const EdgeInsets.all(AppConstants.paddingMedium),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(
-                      AppConstants.borderRadiusLarge,
+                flex: 3,
+                child: Center(
+                  child: Container(
+                    margin: const EdgeInsets.all(AppConstants.paddingMedium),
+                    constraints: const BoxConstraints(
+                      maxWidth: 500,
                     ),
-                    border: Border.all(
-                      color: AppConstants.cardBorder,
-                      width: 2,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(
+                        AppConstants.borderRadiusLarge,
+                      ),
+                      border: Border.all(
+                        color: _attendanceStatus.containsValue(AttendanceStatus.present)
+                            ? Colors.green
+                            : AppConstants.cardBorder,
+                        width: _attendanceStatus.containsValue(AttendanceStatus.present) ? 3 : 2,
+                      ),
+                      boxShadow: [AppConstants.cardShadow],
                     ),
-                    boxShadow: [AppConstants.cardShadow],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(
-                      AppConstants.borderRadiusLarge,
-                    ),
-                    child: Stack(
-                      children: [
-                        CameraPreview(_controller!),
-                        // Processing Overlay
-                        if (_isProcessing)
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withAlpha(102),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(
+                        AppConstants.borderRadiusLarge,
+                      ),
+                      child: Stack(
+                        children: [
+                          CameraPreview(_controller!),
+                          // Processing Overlay
+                          if (_isProcessing)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withAlpha(102),
+                              ),
+                              child: const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        AppConstants.primaryColor,
+                                      ),
+                                    ),
+                                    SizedBox(height: AppConstants.paddingMedium),
+                                    Text(
+                                      'Scanning face...',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                            child: const Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                          // Scan Status Badge
+                          Positioned(
+                            top: 12,
+                            right: 12,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _isScanning
+                                    ? ColorSchemes.presentColor
+                                    : Colors.grey,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withAlpha(77),
+                                    blurRadius: 8,
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      AppConstants.primaryColor,
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
                                     ),
                                   ),
-                                  SizedBox(height: AppConstants.paddingMedium),
+                                  const SizedBox(width: 6),
                                   Text(
-                                    'Scanning face...',
-                                    style: TextStyle(
+                                    _isScanning ? 'Scanning' : 'Ready',
+                                    style: const TextStyle(
                                       color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
                           ),
-                        // Scan Status Badge
-                        Positioned(
-                          top: 12,
-                          right: 12,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _isScanning
-                                  ? ColorSchemes.presentColor
-                                  : Colors.grey,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withAlpha(77),
-                                  blurRadius: 8,
+                          // Camera Switch Button
+                          if (_availableCameras.length > 1)
+                            Positioned(
+                              top: 12,
+                              left: 12,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withAlpha(153),
+                                  shape: BoxShape.circle,
                                 ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
+                                child: IconButton(
+                                  onPressed: _switchCamera,
+                                  icon: const Icon(
+                                    Icons.cameraswitch,
                                     color: Colors.white,
-                                    shape: BoxShape.circle,
+                                    size: 24,
                                   ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  _isScanning ? 'Scanning' : 'Ready',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        // Camera Switch Button
-                        if (_availableCameras.length > 1)
-                          Positioned(
-                            top: 12,
-                            left: 12,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withAlpha(153),
-                                shape: BoxShape.circle,
-                              ),
-                              child: IconButton(
-                                onPressed: _switchCamera,
-                                icon: const Icon(
-                                  Icons.cameraswitch,
-                                  color: Colors.white,
-                                  size: 24,
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               )
             else
               Expanded(
-                flex: 2,
-                child: Container(
-                  margin: const EdgeInsets.all(AppConstants.paddingMedium),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(
-                      AppConstants.borderRadiusLarge,
+                flex: 3,
+                child: Center(
+                  child: Container(
+                    margin: const EdgeInsets.all(AppConstants.paddingMedium),
+                    constraints: const BoxConstraints(
+                      maxWidth: 500,
                     ),
-                    border: Border.all(
-                      color: AppConstants.cardBorder,
-                      width: 2,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(
+                        AppConstants.borderRadiusLarge,
+                      ),
+                      border: Border.all(
+                        color: AppConstants.cardBorder,
+                        width: 2,
+                      ),
+                      color: AppConstants.cardColor,
                     ),
-                    color: AppConstants.cardColor,
-                  ),
-                  child: const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: AppConstants.paddingMedium),
-                        Text(
-                          'Initializing Camera...',
-                          style: TextStyle(
-                            color: AppConstants.textSecondary,
-                            fontSize: 14,
+                    child: const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: AppConstants.paddingMedium),
+                          Text(
+                            'Initializing Camera...',
+                            style: TextStyle(
+                              color: AppConstants.textSecondary,
+                              fontSize: 14,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -768,3 +842,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 }
+
+/// Custom Painter for Face Detection Bounding Box (Spider-Man Mask Style)
+

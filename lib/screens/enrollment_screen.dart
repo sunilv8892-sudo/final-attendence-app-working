@@ -175,6 +175,48 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         );
         final face = detections.first;
 
+        // Strict quality check for enrollment: require large, clear face
+        if (face.width < 150 || face.height < 150) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '❌ Face too small! (${face.width.toInt()}x${face.height.toInt()})\n'
+                  'Please move closer to camera. Need at least 150x150px',
+                ),
+                duration: const Duration(seconds: 2),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+
+        // Check if face is centered (not too far to edges)
+        final imageCenterX = rawImage.width / 2;
+        final imageCenterY = rawImage.height / 2;
+        final faceCenterX = face.x + (face.width / 2);
+        final faceCenterY = face.y + (face.height / 2);
+        
+        final distanceFromCenter = 
+            ((imageCenterX - faceCenterX).abs() + (imageCenterY - faceCenterY).abs()) / 2;
+        final maxDeviation = rawImage.width * 0.25; // Allow 25% deviation from center
+        
+        if (distanceFromCenter > maxDeviation) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('❌ Face not centered. Please center your face in the frame.'),
+                duration: Duration(seconds: 1),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
+
+        debugPrint('✅ Face quality check passed: ${face.width.toInt()}x${face.height.toInt()}');
+
         // Step 2: Crop face (Identical logic to Attendance screen)
         final croppedFace = _cropFace(rawImage, face);
 
@@ -490,18 +532,21 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
               const SizedBox(height: AppConstants.paddingLarge),
 
               // Camera Preview Section
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
-                  border: Border.all(color: AppConstants.cardBorder, width: 2),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
-                  child: Container(
-                    color: AppConstants.secondaryColor,
-                    height: 400,
-                    width: double.infinity,
-                    child: !isReady
+              Center(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
+                    border: Border.all(color: AppConstants.cardBorder, width: 2),
+                  ),
+                  constraints: const BoxConstraints(
+                    maxWidth: 500,
+                    maxHeight: 450,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
+                    child: Container(
+                      color: AppConstants.secondaryColor,
+                      child: !isReady
                         ? const Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -581,6 +626,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                           ),
                   ),
                 ),
+              ),
               ),
 
               const SizedBox(height: AppConstants.paddingLarge),

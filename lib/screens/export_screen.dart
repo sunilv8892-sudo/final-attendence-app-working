@@ -113,78 +113,6 @@ class _ExportScreenState extends State<ExportScreen> {
     }
   }
 
-  Future<void> _exportAttendance() async {
-    if (_isExporting || _exportDirectory == null) return;
-    setState(() {
-      _isExporting = true;
-    });
-
-    final timeStamp = DateTime.now().toIso8601String().replaceAll(
-      RegExp(r'[:\\.]'),
-      '-',
-    );
-    final file = File(
-      '${_exportDirectory!.path}/attendance_details_$timeStamp.csv',
-    );
-
-    try {
-      final csv = await _attendanceModule.exportAttendanceDetailsCSV();
-      await file.writeAsString(csv, flush: true);
-
-      // Save to Downloads folder
-      try {
-        final downloadsDir = Directory('/storage/emulated/0/Download');
-        if (await downloadsDir.exists()) {
-          final downloadFile = File(
-            '${downloadsDir.path}/${p.basename(file.path)}',
-          );
-          await downloadFile.writeAsString(csv, flush: true);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  '✅ Attendance saved to Downloads/${p.basename(file.path)}',
-                ),
-                backgroundColor: AppConstants.successColor,
-                duration: const Duration(seconds: 4),
-              ),
-            );
-          }
-        }
-      } catch (e) {
-        debugPrint('⚠️ Could not save to Downloads: $e');
-      }
-
-      final record = ExportRecord(
-        format: 'ATTENDANCE',
-        path: file.path,
-        timestamp: DateTime.now(),
-      );
-      if (mounted) {
-        setState(() {
-          _history.insert(0, record);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Attendance exported to ${file.path}'),
-            backgroundColor: AppConstants.successColor,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Export failed: $e'),
-            backgroundColor: AppConstants.errorColor,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isExporting = false);
-    }
-  }
 
   Future<void> _setupExportEnvironment() async {
     _dbManager = DatabaseManager();
@@ -326,10 +254,10 @@ class _ExportScreenState extends State<ExportScreen> {
                             const SizedBox(height: AppConstants.paddingLarge),
                             _exportButton(
                               icon: Icons.table_chart,
-                              label: 'Attendance Details (CSV)',
+                              label: 'Attendance (CSV)',
                               onPressed: _isExporting
                                   ? null
-                                  : () => _exportAttendance(),
+                                  : () => _exportData('CSV'),
                             ),
                             const SizedBox(height: AppConstants.paddingSmall),
                             _exportButton(
@@ -338,14 +266,6 @@ class _ExportScreenState extends State<ExportScreen> {
                               onPressed: _isExporting
                                   ? null
                                   : () => _exportEmbeddings(),
-                            ),
-                            const SizedBox(height: AppConstants.paddingSmall),
-                            _exportButton(
-                              icon: Icons.picture_as_pdf,
-                              label: 'Attendance (PDF)',
-                              onPressed: _isExporting
-                                  ? null
-                                  : () => _exportData('PDF'),
                             ),
                             const SizedBox(height: AppConstants.paddingSmall),
                             ElevatedButton.icon(
