@@ -518,24 +518,45 @@ class _ExportScreenState extends State<ExportScreen> {
       } else {
         final csv = await _attendanceModule.exportAsCSV();
         await file.writeAsString(csv, flush: true);
+        
+        // Try to save to Downloads folder
         try {
-          await _saveFileToDownloads(p.basename(file.path), utf8.encode(csv));
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'CSV exported to Downloads/${p.basename(file.path)}',
+          final downloadsDir = Directory('/storage/emulated/0/Download');
+          if (await downloadsDir.exists()) {
+            final downloadFile = File(
+              '${downloadsDir.path}/${p.basename(file.path)}',
+            );
+            await downloadFile.writeAsString(csv, flush: true);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    '✅ CSV exported to Downloads/${p.basename(file.path)}',
+                  ),
+                  backgroundColor: AppConstants.successColor,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('CSV saved to: ${file.path}'),
+                  backgroundColor: AppConstants.warningColor,
+                ),
+              );
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('CSV saved to: ${file.path}'),
+                backgroundColor: AppConstants.warningColor,
               ),
-              backgroundColor: AppConstants.successColor,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        } catch (_) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('CSV saved locally. Use Share button to export.'),
-              backgroundColor: AppConstants.warningColor,
-            ),
-          );
+            );
+          }
         }
       }
 
