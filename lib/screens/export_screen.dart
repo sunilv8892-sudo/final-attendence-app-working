@@ -10,9 +10,11 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/database_manager.dart';
 import '../modules/m4_attendance_management.dart';
+import '../models/attendance_model.dart';
 import '../utils/constants.dart';
 import '../widgets/animated_background.dart';
 
@@ -121,47 +123,85 @@ class _ExportScreenState extends State<ExportScreen> {
 
     try {
       final today = DateTime.now();
-      final sessions = await _dbManager.getTeacherSessionsByDate(today);
+      var sessions = await _dbManager.getTeacherSessionsByDate(today);
 
       if (sessions.isEmpty) {
+        final allSessions = await _dbManager.getAllTeacherSessions();
+        if (allSessions.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No attendance sessions found'),
+                backgroundColor: AppConstants.warningColor,
+              ),
+            );
+          }
+          return;
+        }
+
+        allSessions.sort((a, b) => b.date.compareTo(a.date));
+        final latest = allSessions.first.date;
+        sessions = allSessions.where((s) {
+          return s.date.year == latest.year &&
+              s.date.month == latest.month &&
+              s.date.day == latest.day;
+        }).toList();
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No attendance sessions found for today'),
+            SnackBar(
+              content: Text(
+                'No session today. Exporting most recent (${latest.toString().split(' ')[0]}).',
+              ),
               backgroundColor: AppConstants.warningColor,
+              duration: const Duration(seconds: 3),
             ),
           );
         }
-        return;
       }
 
+      var exportedCount = 0;
+      var savedToDownloads = false;
+
+      final prefs = await SharedPreferences.getInstance();
+
       for (final session in sessions) {
+        final sessionAttendance = _loadSessionAttendance(
+          prefs: prefs,
+          teacherName: session.teacherName,
+          subjectId: session.subjectId,
+          date: session.date,
+        );
         final csv = await exportSubjectAttendanceAsCSV(
           _dbManager,
           session.teacherName,
           session.subjectName,
           session.date,
+          sessionAttendance: sessionAttendance,
         );
 
         final timeStamp = DateTime.now().toIso8601String().replaceAll(
           RegExp(r'[:\\.]'),
           '-',
         );
-        final filename =
+        final rawName =
             '${session.teacherName}_${session.subjectName}_$timeStamp.csv'
                 .replaceAll(' ', '_');
+        final filename = _safeFilename(rawName);
         final file = File('${_exportDirectory!.path}/$filename');
         await file.writeAsString(csv, flush: true);
 
-        // Save to Downloads as backup
-        try {
-          final downloadsDir = Directory('/storage/emulated/0/Download');
-          if (await downloadsDir.exists()) {
-            final downloadFile = File('${downloadsDir.path}/$filename');
-            await downloadFile.writeAsString(csv, flush: true);
-          }
-        } catch (e) {
-          debugPrint('⚠️ Could not save to Downloads: $e');
+        if (!await file.exists()) {
+          debugPrint('Subject attendance export failed to write: $filename');
+          continue;
+        }
+
+        exportedCount++;
+
+        final bytes = await file.readAsBytes();
+        final saved = await _saveFileToDownloads(filename, bytes);
+        if (saved == true) {
+          savedToDownloads = true;
         }
 
         final record = ExportRecord(
@@ -178,10 +218,22 @@ class _ExportScreenState extends State<ExportScreen> {
       }
 
       if (mounted) {
+        if (exportedCount == 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No subject attendance files were exported'),
+              backgroundColor: AppConstants.errorColor,
+            ),
+          );
+          return;
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '✅ Subject attendance exported (${sessions.length} session${sessions.length > 1 ? 's' : ''})',
+              savedToDownloads
+                  ? '✅ Subject attendance exported to Downloads/FaceAttendanceExports (${exportedCount} session${exportedCount > 1 ? 's' : ''})'
+                  : '✅ Subject attendance exported (${exportedCount} session${exportedCount > 1 ? 's' : ''})',
             ),
             backgroundColor: AppConstants.successColor,
             duration: const Duration(seconds: 3),
@@ -201,6 +253,60 @@ class _ExportScreenState extends State<ExportScreen> {
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
+  }
+
+  String _safeFilename(String value) {
+    final cleaned = value.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+    final trimmed = cleaned.replaceAll(RegExp(r'_+'), '_').trim();
+    return trimmed.isEmpty ? 'subject_attendance.csv' : trimmed;
+  }
+
+  Map<int, AttendanceStatus>? _loadSessionAttendance({
+    required SharedPreferences prefs,
+    required String teacherName,
+    required int subjectId,
+    required DateTime date,
+  }) {
+    final key = _sessionAttendanceKey(
+      teacherName: teacherName,
+      subjectId: subjectId,
+      date: date,
+    );
+    final raw = prefs.getString(key);
+    if (raw == null || raw.isEmpty) return null;
+
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final result = <int, AttendanceStatus>{};
+      decoded.forEach((studentId, statusName) {
+        final id = int.tryParse(studentId);
+        if (id == null) return;
+        final status = AttendanceStatus.values.firstWhere(
+          (s) => s.name == statusName,
+          orElse: () => AttendanceStatus.absent,
+        );
+        result[id] = status;
+      });
+      return result;
+    } catch (e) {
+      debugPrint('Failed to parse session attendance: $e');
+      return null;
+    }
+  }
+
+  String _sessionAttendanceKey({
+    required String teacherName,
+    required int subjectId,
+    required DateTime date,
+  }) {
+    final dateStr =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final safeTeacher = teacherName
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .trim();
+    return 'session_attendance_${safeTeacher}_${subjectId}_$dateStr';
   }
 
 

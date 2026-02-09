@@ -64,13 +64,28 @@ class _AnimatedBackgroundState extends State<AnimatedBackground> {
       fit: StackFit.expand,
       children: [
         if (_useVideo && _controller != null && _controller!.value.isInitialized)
-          FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(
-              width: _controller!.value.size.width,
-              height: _controller!.value.size.height,
-              child: VideoPlayer(_controller!),
-            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final videoSize = _controller!.value.size;
+              return ClipRect(
+                child: SizedBox.expand(
+                  child: Center(
+                    child: Transform.scale(
+                      scale: 3.0,
+                      child: FittedBox(
+                        fit: BoxFit.cover,
+                        alignment: Alignment.center,
+                        child: SizedBox(
+                          width: videoSize.width,
+                          height: videoSize.height,
+                          child: VideoPlayer(_controller!),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           )
         else if (_useGradient)
           const _AnimatedGradient()

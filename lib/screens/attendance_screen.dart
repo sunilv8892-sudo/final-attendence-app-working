@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'dart:typed_data';
+import 'dart:convert';
+import 'dart:async';
+import 'dart:math';
 import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,6 +56,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   int _consecutiveDetections = 0;
   static const int _requiredConsecutiveDetections = 3; // Require 3 consecutive matches for extra safety
 
+  // Face overlay
+  DetectedFace? _overlayFace;
+  String? _overlayName;
+  Color _overlayColor = Colors.red;
+  Size? _imageSize;
+  Timer? _overlayTimer;
+
   @override
   void initState() {
     super.initState();
@@ -64,6 +74,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     _controller?.dispose();
     _faceDetector.dispose();
     _faceEmbedder.dispose();
+    _overlayTimer?.cancel();
     super.dispose();
   }
 
@@ -197,6 +208,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         );
         final face = detections.first;
 
+        _imageSize = Size(rawImage.width.toDouble(), rawImage.height.toDouble());
+
         // Validate face size (must be at least 80x80)
         if (face.width < 80 || face.height < 80) {
           debugPrint('⚠️ Face too small: ${face.width.toInt()}x${face.height.toInt()}');
@@ -264,6 +277,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           _lastDetectedStudentId = null;
           if (mounted) setState(() {});
         }
+
+        // Set overlay
+        _setOverlay(face, match?.name);
       }
     } catch (e) {
       debugPrint('Scan error: $e');
@@ -412,6 +428,42 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         );
         submitted++;
       }
+
+      final subjectId =
+          widget.subject.id ?? DateTime.now().millisecondsSinceEpoch;
+      final prefs = await SharedPreferences.getInstance();
+      final sessionKey = _sessionAttendanceKey(
+        teacherName: widget.teacherName,
+        subjectId: subjectId,
+        date: _attendanceDate!,
+      );
+      final sessionPayload = <String, String>{};
+      for (final entry in _attendanceStatus.entries) {
+        sessionPayload[entry.key.toString()] = entry.value.name;
+      }
+      await prefs.setString(sessionKey, jsonEncode(sessionPayload));
+
+      final existingSessions = await _dbManager.getTeacherSessionsByDate(
+        _attendanceDate!,
+      );
+      final alreadySaved = existingSessions.any(
+        (session) =>
+            session.subjectId == subjectId &&
+            session.teacherName.toLowerCase() ==
+                widget.teacherName.toLowerCase(),
+      );
+      if (!alreadySaved) {
+        await _dbManager.insertTeacherSession(
+          TeacherSession(
+            id: DateTime.now().millisecondsSinceEpoch,
+            teacherName: widget.teacherName,
+            subjectId: subjectId,
+            subjectName: widget.subject.name,
+            date: _attendanceDate!,
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
       debugPrint('✅ Attendance submitted for $submitted students');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -470,6 +522,74 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
+  }
+
+  String _sessionAttendanceKey({
+    required String teacherName,
+    required int subjectId,
+    required DateTime date,
+  }) {
+    final dateStr =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final safeTeacher = teacherName
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .trim();
+    return 'session_attendance_${safeTeacher}_${subjectId}_$dateStr';
+  }
+
+  void _setOverlay(DetectedFace face, String? name) {
+    _overlayTimer?.cancel();
+    setState(() {
+      _overlayFace = face;
+      _overlayName = name;
+      _overlayColor = name != null ? Colors.green : Colors.red;
+    });
+    _overlayTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _overlayFace = null;
+          _overlayName = null;
+        });
+      }
+    });
+  }
+
+  Widget _buildFaceOverlay(Size displaySize) {
+    final scale = min(displaySize.width / _imageSize!.width, displaySize.height / _imageSize!.height);
+    final offsetX = (displaySize.width - _imageSize!.width * scale) / 2;
+    final offsetY = (displaySize.height - _imageSize!.height * scale) / 2;
+
+    final left = _overlayFace!.x * scale + offsetX;
+    final top = _overlayFace!.y * scale + offsetY;
+    final width = _overlayFace!.width * scale;
+    final height = _overlayFace!.height * scale;
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: _overlayColor, width: 3),
+        ),
+        child: _overlayName != null
+            ? Align(
+                alignment: Alignment.topCenter,
+                child: Container(
+                  color: _overlayColor,
+                  padding: const EdgeInsets.all(4),
+                  child: Text(
+                    _overlayName!,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              )
+            : null,
+      ),
+    );
   }
 
   @override
@@ -545,103 +665,111 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       borderRadius: BorderRadius.circular(
                         AppConstants.borderRadiusLarge,
                       ),
-                      child: Stack(
-                        children: [
-                          CameraPreview(_controller!),
-                          // Processing Overlay
-                          if (_isProcessing)
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withAlpha(102),
-                              ),
-                              child: const Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    CircularProgressIndicator(
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        AppConstants.primaryColor,
-                                      ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final displaySize = constraints.biggest;
+                          return Stack(
+                            children: [
+                              CameraPreview(_controller!),
+                              // Face Overlay
+                              if (_overlayFace != null && _imageSize != null)
+                                _buildFaceOverlay(displaySize),
+                              // Processing Overlay
+                              if (_isProcessing)
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withAlpha(102),
+                                  ),
+                                  child: const Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        CircularProgressIndicator(
+                                          valueColor: AlwaysStoppedAnimation<Color>(
+                                            AppConstants.primaryColor,
+                                          ),
+                                        ),
+                                        SizedBox(height: AppConstants.paddingMedium),
+                                        Text(
+                                          'Scanning face...',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    SizedBox(height: AppConstants.paddingMedium),
-                                    Text(
-                                      'Scanning face...',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              // Scan Status Badge
+                              Positioned(
+                                top: 12,
+                                right: 12,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _isScanning
+                                        ? ColorSchemes.presentColor
+                                        : Colors.grey,
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withAlpha(77),
+                                        blurRadius: 8,
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        _isScanning ? 'Scanning' : 'Ready',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          // Scan Status Badge
-                          Positioned(
-                            top: 12,
-                            right: 12,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _isScanning
-                                    ? ColorSchemes.presentColor
-                                    : Colors.grey,
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withAlpha(77),
-                                    blurRadius: 8,
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
+                              // Camera Switch Button
+                              if (_availableCameras.length > 1)
+                                Positioned(
+                                  top: 12,
+                                  left: 12,
+                                  child: Container(
                                     decoration: BoxDecoration(
-                                      color: Colors.white,
+                                      color: Colors.black.withAlpha(153),
                                       shape: BoxShape.circle,
                                     ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _isScanning ? 'Scanning' : 'Ready',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
+                                    child: IconButton(
+                                      onPressed: _switchCamera,
+                                      icon: const Icon(
+                                        Icons.cameraswitch,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          // Camera Switch Button
-                          if (_availableCameras.length > 1)
-                            Positioned(
-                              top: 12,
-                              left: 12,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withAlpha(153),
-                                  shape: BoxShape.circle,
                                 ),
-                                child: IconButton(
-                                  onPressed: _switchCamera,
-                                  icon: const Icon(
-                                    Icons.cameraswitch,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
+                            ],
+                          );
+                        },
                       ),
                     ),
                   ),

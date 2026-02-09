@@ -322,9 +322,15 @@ Future<String> exportSubjectAttendanceAsCSV(
   String teacherName,
   String subjectName,
   DateTime date,
+  {
+    Map<int, AttendanceStatus>? sessionAttendance,
+  }
 ) async {
   final allStudents = await dbManager.getAllStudents();
-  final attendanceRecords = await dbManager.getAttendanceForDate(date);
+  final useSessionAttendance = sessionAttendance != null;
+  final attendanceRecords = useSessionAttendance
+      ? <AttendanceRecord>[]
+      : await dbManager.getAttendanceForDate(date);
 
   final buffer = StringBuffer();
 
@@ -348,16 +354,20 @@ Future<String> exportSubjectAttendanceAsCSV(
   for (final studentEntry in studentMap.entries) {
     final studentId = studentEntry.key;
     final student = studentEntry.value;
-    final record = attendanceRecords.firstWhere(
-      (r) => r.studentId == studentId,
-      orElse: () => AttendanceRecord(
-        studentId: studentId,
-        date: date,
-        status: AttendanceStatus.absent,
-      ),
-    );
+    final status = useSessionAttendance
+        ? (sessionAttendance?[studentId] ?? AttendanceStatus.absent)
+        : attendanceRecords
+            .firstWhere(
+              (r) => r.studentId == studentId,
+              orElse: () => AttendanceRecord(
+                studentId: studentId,
+                date: date,
+                status: AttendanceStatus.absent,
+              ),
+            )
+            .status;
 
-    if (record.status == AttendanceStatus.present) {
+    if (status == AttendanceStatus.present) {
       presentStudents.add(student);
     } else {
       absentStudents.add(student);

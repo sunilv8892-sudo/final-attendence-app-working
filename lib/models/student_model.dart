@@ -4,6 +4,9 @@ class Student {
   final String name;
   final String rollNumber;
   final String className;
+  final String gender;
+  final int age;
+  final String phoneNumber;
   final DateTime enrollmentDate;
 
   Student({
@@ -11,6 +14,9 @@ class Student {
     required this.name,
     required this.rollNumber,
     required this.className,
+    required this.gender,
+    required this.age,
+    required this.phoneNumber,
     DateTime? enrollmentDate,
   }) : enrollmentDate = enrollmentDate ?? DateTime.now();
 
@@ -21,6 +27,9 @@ class Student {
       'name': name,
       'roll_number': rollNumber,
       'class': className,
+      'gender': gender,
+      'age': age,
+      'phone_number': phoneNumber,
       'enrollment_date': enrollmentDate.toIso8601String(),
     };
   }
@@ -32,11 +41,14 @@ class Student {
       name: map['name'] as String,
       rollNumber: map['roll_number'] as String,
       className: map['class'] as String,
+      gender: map['gender'] as String? ?? '',
+      age: map['age'] as int? ?? 0,
+      phoneNumber: map['phone_number'] as String? ?? '',
       enrollmentDate: DateTime.parse(map['enrollment_date'] as String),
     );
   }
 
   @override
   String toString() =>
-      'Student(id: $id, name: $name, rollNumber: $rollNumber, class: $className)';
+      'Student(id: $id, name: $name, rollNumber: $rollNumber, class: $className, gender: $gender, age: $age, phone: $phoneNumber)';
 }

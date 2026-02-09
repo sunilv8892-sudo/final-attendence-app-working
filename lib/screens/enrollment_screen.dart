@@ -23,6 +23,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   final _nameController = TextEditingController();
   final _rollController = TextEditingController();
   final _classController = TextEditingController();
+  final _ageController = TextEditingController();
+  final _phoneController = TextEditingController();
+  String _selectedGender = 'Male';
 
   CameraController? _controller;
   late face_detection_module.FaceDetectionModule _faceDetector;
@@ -54,6 +57,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     _nameController.dispose();
     _rollController.dispose();
     _classController.dispose();
+    _ageController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -343,10 +348,20 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   Future<void> _saveStudent() async {
     if (_nameController.text.isEmpty ||
         _rollController.text.isEmpty ||
-        _classController.text.isEmpty) {
+        _classController.text.isEmpty ||
+        _ageController.text.isEmpty ||
+        _phoneController.text.isEmpty) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+      return;
+    }
+
+    final age = int.tryParse(_ageController.text);
+    if (age == null || age <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid age')),
+      );
       return;
     }
 
@@ -368,9 +383,12 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         name: _nameController.text,
         rollNumber: _rollController.text,
         className: _classController.text,
+        gender: _selectedGender,
+        age: age,
+        phoneNumber: _phoneController.text,
         enrollmentDate: DateTime.now(),
       );
-      debugPrint('   Name: ${student.name}, Roll: ${student.rollNumber}, Class: ${student.className}');
+      debugPrint('   Name: ${student.name}, Roll: ${student.rollNumber}, Class: ${student.className}, Gender: ${student.gender}, Age: ${student.age}, Phone: ${student.phoneNumber}');
 
       final studentId = await _dbManager.insertStudent(student);
       debugPrint('   ✅ Student inserted with ID: $studentId');
@@ -397,6 +415,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         debugPrint('   Name: ${savedStudent.name}');
         debugPrint('   Roll: ${savedStudent.rollNumber}');
         debugPrint('   Class: ${savedStudent.className}');
+        debugPrint('   Gender: ${savedStudent.gender}');
+        debugPrint('   Age: ${savedStudent.age}');
+        debugPrint('   Phone: ${savedStudent.phoneNumber}');
         
         // Verify embeddings were saved
         final savedEmbeddings = await _dbManager.getEmbeddingsForStudent(studentId);
@@ -522,6 +543,60 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                           labelText: 'Class/Section',
                           hintText: 'e.g., CSE-A',
                           prefixIcon: const Icon(Icons.school),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppConstants.borderRadius,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppConstants.paddingMedium),
+                      DropdownButtonFormField<String>(
+                        value: _selectedGender,
+                        decoration: InputDecoration(
+                          labelText: 'Gender',
+                          prefixIcon: const Icon(Icons.wc),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppConstants.borderRadius,
+                            ),
+                          ),
+                        ),
+                        items: ['Male', 'Female', 'Other'].map((String value) {
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value),
+                          );
+                        }).toList(),
+                        onChanged: (String? newValue) {
+                          setState(() {
+                            _selectedGender = newValue!;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: AppConstants.paddingMedium),
+                      TextField(
+                        controller: _ageController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'Age',
+                          hintText: 'e.g., 20',
+                          prefixIcon: const Icon(Icons.calendar_today),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppConstants.borderRadius,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppConstants.paddingMedium),
+                      TextField(
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        decoration: InputDecoration(
+                          labelText: 'Phone Number',
+                          hintText: 'e.g., +1234567890',
+                          prefixIcon: const Icon(Icons.phone),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(
                               AppConstants.borderRadius,
