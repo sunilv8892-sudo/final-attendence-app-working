@@ -21,84 +21,43 @@ class HomeScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header Card with Gradient
-              Container(
-                decoration: BoxDecoration(
-                  gradient: AppConstants.blueGradient,
-                  borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
-                  boxShadow: [AppConstants.buttonShadow],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(AppConstants.paddingLarge),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(26),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.face,
-                          size: 56,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: AppConstants.paddingMedium),
-                      const Text(
-                        'Face Recognition System',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: AppConstants.paddingSmall),
-                      Text(
-                        'Intelligent Offline Attendance Management',
-                        style: TextStyle(
-                          color: Colors.white.withAlpha(220),
-                          fontSize: 14,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
+              _heroHeader(context),
               const SizedBox(height: AppConstants.paddingLarge),
 
-              // Core Actions Section
-              _sectionHeader('Core Actions'),
-              _actionButton(
-                context,
-                icon: Icons.person_add,
-                label: 'Enroll Student',
-                subtitle: 'Add new student face',
-                route: AppConstants.routeEnroll,
-                color: AppConstants.primaryColor,
-              ),
-
-              const SizedBox(height: AppConstants.paddingMedium),
-
-              _actionButton(
-                context,
-                icon: Icons.camera,
-                label: 'Take Attendance',
-                subtitle: 'Mark attendance via camera',
-                route: AppConstants.routeAttendance,
-                color: AppConstants.successColor,
-              ),
-
-              const SizedBox(height: AppConstants.paddingLarge),
-
-              // Management Section
-              _sectionHeader('Management'),
+              _sectionHeader('Quick Actions'),
               Row(
                 children: [
                   Expanded(
-                    child: _smallActionButton(
+                    child: _actionCard(
+                      context,
+                      icon: Icons.person_add,
+                      label: 'Enroll',
+                      subtitle: 'Add students',
+                      route: AppConstants.routeEnroll,
+                      color: AppConstants.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(width: AppConstants.paddingMedium),
+                  Expanded(
+                    child: _actionCard(
+                      context,
+                      icon: Icons.camera_alt,
+                      label: 'Attendance',
+                      subtitle: 'Scan faces',
+                      route: AppConstants.routeAttendance,
+                      color: AppConstants.successColor,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: AppConstants.paddingLarge),
+
+              _sectionHeader('Tools'),
+              Row(
+                children: [
+                  Expanded(
+                    child: _toolCard(
                       context,
                       icon: Icons.storage,
                       label: 'Database',
@@ -107,18 +66,18 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(width: AppConstants.paddingMedium),
                   Expanded(
-                    child: _smallActionButton(
+                    child: _toolCard(
                       context,
-                      icon: Icons.download,
+                      icon: Icons.download_rounded,
                       label: 'Export',
                       route: AppConstants.routeExport,
                     ),
                   ),
                   const SizedBox(width: AppConstants.paddingMedium),
                   Expanded(
-                    child: _smallActionButton(
+                    child: _toolCard(
                       context,
-                      icon: Icons.settings,
+                      icon: Icons.tune,
                       label: 'Settings',
                       route: AppConstants.routeSettings,
                     ),
@@ -128,53 +87,70 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: AppConstants.paddingLarge),
 
-              // Features Card
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppConstants.paddingMedium),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppConstants.primaryColor.withAlpha(26),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.star,
-                              size: 20,
-                              color: AppConstants.primaryColor,
-                            ),
-                          ),
-                          const SizedBox(width: AppConstants.paddingSmall),
-                          const Text(
-                            'Features',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppConstants.paddingMedium),
-                      _featureRow('🔒', 'Offline Processing'),
-                      _featureRow('📷', 'Real-time Face Detection'),
-                      _featureRow('🧠', 'Face Embedding Extraction'),
-                      _featureRow('🎯', 'Intelligent Face Matching'),
-                      _featureRow('📝', 'Attendance Management'),
-                      _featureRow('📊', 'Data Export (CSV/PDF)'),
-                    ],
-                  ),
-                ),
+              _sectionHeader('Features'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: const [
+                  _FeatureChip(label: 'Offline'),
+                  _FeatureChip(label: 'Real-time Detection'),
+                  _FeatureChip(label: 'Embeddings'),
+                  _FeatureChip(label: 'Smart Matching'),
+                  _FeatureChip(label: 'Attendance Logs'),
+                  _FeatureChip(label: 'CSV/PDF Export'),
+                ],
               ),
-
               const SizedBox(height: AppConstants.paddingLarge),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _heroHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.paddingLarge),
+      decoration: BoxDecoration(
+        gradient: AppConstants.blueGradient,
+        borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
+        boxShadow: [AppConstants.buttonShadow],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(30),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.face_retouching_natural, color: Colors.white, size: 36),
+          ),
+          const SizedBox(width: AppConstants.paddingMedium),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  AppConstants.appName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Smart, offline face attendance',
+                  style: TextStyle(
+                    color: Colors.white.withAlpha(220),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          )
+        ],
       ),
     );
   }
@@ -188,7 +164,7 @@ class HomeScreen extends StatelessWidget {
           fontSize: 16,
           fontWeight: FontWeight.bold,
           color: AppConstants.textSecondary,
-          letterSpacing: 0.5,
+          Widget _actionCard(
         ),
       ),
     );
@@ -196,25 +172,25 @@ class HomeScreen extends StatelessWidget {
 
   Widget _actionButton(
     BuildContext context, {
-    required IconData icon,
+            return InkWell(
     required String label,
     required String subtitle,
     required String route,
     required Color color,
-  }) {
+                  borderRadius: BorderRadius.circular(14),
     return InkWell(
       onTap: () => Navigator.pushNamed(context, route),
       child: Container(
-        decoration: BoxDecoration(
+                  padding: const EdgeInsets.all(AppConstants.paddingMedium),
           color: AppConstants.cardColor,
           borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
           border: Border.all(color: AppConstants.cardBorder),
-        ),
+                        padding: const EdgeInsets.all(10),
         child: Padding(
           padding: const EdgeInsets.all(AppConstants.paddingMedium),
           child: Row(
             children: [
-              Container(
+                        child: Icon(icon, size: 24, color: color),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: color.withAlpha(26),
@@ -224,7 +200,7 @@ class HomeScreen extends StatelessWidget {
               ),
               const SizedBox(width: AppConstants.paddingMedium),
               Expanded(
-                child: Column(
+                                fontSize: 14,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
@@ -232,14 +208,14 @@ class HomeScreen extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                      ),
+                                fontSize: 12,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
                       style: const TextStyle(
                         fontSize: 13,
-                        color: AppConstants.textTertiary,
+                      Icon(Icons.arrow_forward_ios, color: color, size: 16),
                       ),
                     ),
                   ],
@@ -247,7 +223,7 @@ class HomeScreen extends StatelessWidget {
               ),
               Icon(Icons.arrow_forward, color: color),
             ],
-          ),
+          Widget _toolCard(
         ),
       ),
     );
@@ -258,7 +234,7 @@ class HomeScreen extends StatelessWidget {
     required IconData icon,
     required String label,
     required String route,
-  }) {
+                  borderRadius: BorderRadius.circular(12),
     return InkWell(
       onTap: () => Navigator.pushNamed(context, route),
       child: Container(
@@ -271,7 +247,7 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 28, color: AppConstants.primaryColor),
+                        fontSize: 11,
             const SizedBox(height: AppConstants.paddingSmall),
             Text(
               label,
@@ -281,27 +257,32 @@ class HomeScreen extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  Widget _featureRow(String icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Text(icon, style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: AppConstants.paddingMedium),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppConstants.textPrimary,
+        class _FeatureChip extends StatelessWidget {
+          final String label;
+
+          const _FeatureChip({required this.label});
+
+          @override
+          Widget build(BuildContext context) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppConstants.cardColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppConstants.cardBorder),
               ),
-            ),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppConstants.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            );
+          }
+        }
           ),
         ],
       ),
