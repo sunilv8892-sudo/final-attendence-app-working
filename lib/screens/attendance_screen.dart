@@ -845,22 +845,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: AppConstants.paddingMedium),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _submitAttendance,
-                icon: const Icon(Icons.check_circle),
-                label: const Text(
-                  'Submit',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: markedCount > 0
-                      ? ColorSchemes.presentColor
-                      : AppConstants.textTertiary,
-                ),
-              ),
-            ),
           ],
         ),
       ),

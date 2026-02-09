@@ -114,6 +114,95 @@ class _ExportScreenState extends State<ExportScreen> {
     }
   }
 
+  Future<void> _exportSubjectAttendance() async {
+    if (_isExporting || _exportDirectory == null) return;
+
+    setState(() => _isExporting = true);
+
+    try {
+      final today = DateTime.now();
+      final sessions = await _dbManager.getTeacherSessionsByDate(today);
+
+      if (sessions.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No attendance sessions found for today'),
+              backgroundColor: AppConstants.warningColor,
+            ),
+          );
+        }
+        return;
+      }
+
+      for (final session in sessions) {
+        final csv = await exportSubjectAttendanceAsCSV(
+          _dbManager,
+          session.teacherName,
+          session.subjectName,
+          session.date,
+        );
+
+        final timeStamp = DateTime.now().toIso8601String().replaceAll(
+          RegExp(r'[:\\.]'),
+          '-',
+        );
+        final filename =
+            '${session.teacherName}_${session.subjectName}_$timeStamp.csv'
+                .replaceAll(' ', '_');
+        final file = File('${_exportDirectory!.path}/$filename');
+        await file.writeAsString(csv, flush: true);
+
+        // Save to Downloads as backup
+        try {
+          final downloadsDir = Directory('/storage/emulated/0/Download');
+          if (await downloadsDir.exists()) {
+            final downloadFile = File('${downloadsDir.path}/$filename');
+            await downloadFile.writeAsString(csv, flush: true);
+          }
+        } catch (e) {
+          debugPrint('⚠️ Could not save to Downloads: $e');
+        }
+
+        final record = ExportRecord(
+          format: 'SUBJECT_ATTENDANCE',
+          path: file.path,
+          timestamp: DateTime.now(),
+        );
+
+        if (mounted) {
+          setState(() {
+            _history.insert(0, record);
+          });
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ Subject attendance exported (${sessions.length} session${sessions.length > 1 ? 's' : ''})',
+            ),
+            backgroundColor: AppConstants.successColor,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Subject attendance export error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: AppConstants.errorColor,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
 
   Future<void> _setupExportEnvironment() async {
     _dbManager = DatabaseManager();
@@ -258,6 +347,14 @@ class _ExportScreenState extends State<ExportScreen> {
                               onPressed: _isExporting
                                   ? null
                                   : () => _exportData('CSV'),
+                            ),
+                            const SizedBox(height: AppConstants.paddingSmall),
+                            _exportButton(
+                              icon: Icons.subject,
+                              label: 'Subject Attendance (CSV)',
+                              onPressed: _isExporting
+                                  ? null
+                                  : () => _exportSubjectAttendance(),
                             ),
                             const SizedBox(height: AppConstants.paddingSmall),
                             _exportButton(

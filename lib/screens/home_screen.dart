@@ -13,7 +13,9 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text(AppConstants.appName),
         elevation: 0,
-        flexibleSpace: Container(decoration: BoxDecoration(gradient: AppConstants.blueGradient)),
+        flexibleSpace: Container(
+          decoration: BoxDecoration(gradient: AppConstants.blueGradient),
+        ),
       ),
       body: AnimatedBackground(
         child: SingleChildScrollView(
@@ -124,7 +126,11 @@ class HomeScreen extends StatelessWidget {
               color: Colors.white.withAlpha(30),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.face_retouching_natural, color: Colors.white, size: 36),
+            child: const Icon(
+              Icons.face_retouching_natural,
+              color: Colors.white,
+              size: 36,
+            ),
           ),
           const SizedBox(width: AppConstants.paddingMedium),
           Expanded(
@@ -164,127 +170,127 @@ class HomeScreen extends StatelessWidget {
           fontSize: 16,
           fontWeight: FontWeight.bold,
           color: AppConstants.textSecondary,
-          Widget _actionCard(
+          letterSpacing: 0.5,
         ),
       ),
     );
   }
 
-  Widget _actionButton(
+  Widget _actionCard(
     BuildContext context, {
-            return InkWell(
+    required IconData icon,
     required String label,
     required String subtitle,
     required String route,
     required Color color,
-                  borderRadius: BorderRadius.circular(14),
-    return InkWell(
-      onTap: () => Navigator.pushNamed(context, route),
-      child: Container(
-                  padding: const EdgeInsets.all(AppConstants.paddingMedium),
-          color: AppConstants.cardColor,
-          borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
-          border: Border.all(color: AppConstants.cardBorder),
-                        padding: const EdgeInsets.all(10),
-        child: Padding(
-          padding: const EdgeInsets.all(AppConstants.paddingMedium),
-          child: Row(
-            children: [
-                        child: Icon(icon, size: 24, color: color),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withAlpha(26),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 32, color: color),
-              ),
-              const SizedBox(width: AppConstants.paddingMedium),
-              Expanded(
-                                fontSize: 14,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 13,
-                      Icon(Icons.arrow_forward_ios, color: color, size: 16),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.arrow_forward, color: color),
-            ],
-          Widget _toolCard(
-        ),
-      ),
-    );
-  }
-
-  Widget _smallActionButton(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required String route,
-                  borderRadius: BorderRadius.circular(12),
+  }) {
     return InkWell(
       onTap: () => Navigator.pushNamed(context, route),
       child: Container(
         decoration: BoxDecoration(
           color: AppConstants.cardColor,
-          borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppConstants.cardBorder),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppConstants.paddingMedium),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(26),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 24, color: color),
+              ),
+              const SizedBox(width: AppConstants.paddingMedium),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppConstants.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios, color: color, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _toolCard(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String route,
+  }) {
+    return InkWell(
+      onTap: () => Navigator.pushNamed(context, route),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppConstants.cardColor,
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppConstants.cardBorder),
         ),
         padding: const EdgeInsets.all(AppConstants.paddingMedium),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-                        fontSize: 11,
+            Icon(icon, size: 24, color: AppConstants.primaryColor),
             const SizedBox(height: AppConstants.paddingSmall),
             Text(
               label,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-        class _FeatureChip extends StatelessWidget {
-          final String label;
+class _FeatureChip extends StatelessWidget {
+  final String label;
 
-          const _FeatureChip({required this.label});
+  const _FeatureChip({required this.label});
 
-          @override
-          Widget build(BuildContext context) {
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppConstants.cardColor,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppConstants.cardBorder),
-              ),
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppConstants.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            );
-          }
-        }
-          ),
-        ],
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppConstants.cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppConstants.cardBorder),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          color: AppConstants.textSecondary,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

@@ -315,3 +315,74 @@ class AttendanceResult {
     this.timestamp,
   });
 }
+
+/// Export a subject-based attendance report as CSV
+Future<String> exportSubjectAttendanceAsCSV(
+  DatabaseManager dbManager,
+  String teacherName,
+  String subjectName,
+  DateTime date,
+) async {
+  final allStudents = await dbManager.getAllStudents();
+  final attendanceRecords = await dbManager.getAttendanceForDate(date);
+
+  final buffer = StringBuffer();
+
+  // Header with teacher and subject info
+  buffer.writeln('Teacher Name,Subject');
+  buffer.writeln('"$teacherName","$subjectName"');
+  buffer.writeln('');
+  buffer.writeln('Date: ${date.toString().split(' ')[0]}');
+  buffer.writeln('');
+
+  final presentStudents = <Student>[];
+  final absentStudents = <Student>[];
+
+  final studentMap = <int, Student>{};
+  for (final student in allStudents) {
+    if (student.id != null) {
+      studentMap[student.id!] = student;
+    }
+  }
+
+  for (final studentEntry in studentMap.entries) {
+    final studentId = studentEntry.key;
+    final student = studentEntry.value;
+    final record = attendanceRecords.firstWhere(
+      (r) => r.studentId == studentId,
+      orElse: () => AttendanceRecord(
+        studentId: studentId,
+        date: date,
+        status: AttendanceStatus.absent,
+      ),
+    );
+
+    if (record.status == AttendanceStatus.present) {
+      presentStudents.add(student);
+    } else {
+      absentStudents.add(student);
+    }
+  }
+
+  buffer.writeln('Present Students,Absent Students');
+
+  final maxLines = presentStudents.length > absentStudents.length
+      ? presentStudents.length
+      : absentStudents.length;
+
+  for (int i = 0; i < maxLines; i++) {
+    final presentName = i < presentStudents.length
+        ? presentStudents[i].name
+        : '';
+    final absentName = i < absentStudents.length
+        ? absentStudents[i].name
+        : '';
+    buffer.writeln('"$presentName","$absentName"');
+  }
+
+  buffer.writeln('');
+  buffer.writeln('Total Present,Total Absent,Total Students');
+  buffer.writeln('${presentStudents.length},${absentStudents.length},${studentMap.length}');
+
+  return buffer.toString();
+}
