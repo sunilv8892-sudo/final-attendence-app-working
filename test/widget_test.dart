@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:yolo_app/main.dart';
+import 'package:yolo_app/utils/constants.dart';
 
 void main() {
   testWidgets('App loads successfully', (WidgetTester tester) async {
@@ -18,12 +19,7 @@ void main() {
     // Verify app initializes
     expect(find.byType(FaceRecognitionApp), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Verify the app name renders on the home screen
+    expect(find.text(AppConstants.appName), findsOneWidget);
   });
 }
