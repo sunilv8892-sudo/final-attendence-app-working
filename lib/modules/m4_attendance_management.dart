@@ -315,3 +315,87 @@ class AttendanceResult {
     this.timestamp,
   });
 }
+
+/// Export a subject-based attendance report as CSV
+Future<String> exportSubjectAttendanceAsCSV(
+  DatabaseManager dbManager,
+  String teacherName,
+  String subjectName,
+  DateTime date,
+  {Map<int, AttendanceStatus>? sessionAttendance,
+  }
+) async {
+  final allStudents = await dbManager.getAllStudents();
+  final attendanceRecords = sessionAttendance == null
+      ? await dbManager.getAttendanceForDate(date)
+      : const <AttendanceRecord>[];
+  
+  final buffer = StringBuffer();
+  
+  // Header with teacher and subject info
+  buffer.writeln('Teacher Name,Subject');
+  buffer.writeln('"$teacherName","$subjectName"');
+  buffer.writeln('');
+  buffer.writeln('Date: ${date.toString().split(' ')[0]}');
+  buffer.writeln('');
+  
+  // Get present and absent students
+  final presentStudents = <Student>[];
+  final absentStudents = <Student>[];
+  
+  // Build student lookup map (only students with valid IDs)
+  final studentMap = <int, Student>{};
+  for (final student in allStudents) {
+    if (student.id != null) {
+      studentMap[student.id!] = student;
+    }
+  }
+  
+  // Process all students; default absent if no record
+  for (final studentEntry in studentMap.entries) {
+    final studentId = studentEntry.key;
+    final student = studentEntry.value;
+    final status = sessionAttendance != null
+        ? (sessionAttendance[studentId] ?? AttendanceStatus.absent)
+        : attendanceRecords.firstWhere(
+            (r) => r.studentId == studentId,
+            orElse: () => AttendanceRecord(
+              studentId: studentId,
+              date: date,
+              status: AttendanceStatus.absent,
+            ),
+          ).status;
+
+    if (status == AttendanceStatus.present) {
+      presentStudents.add(student);
+    } else {
+      absentStudents.add(student);
+    }
+  }
+  
+  // Column headers
+  buffer.writeln('Present Students,Absent Students');
+  
+  // Write present and absent side by side
+  final maxLines = presentStudents.length > absentStudents.length
+      ? presentStudents.length
+      : absentStudents.length;
+  
+  for (int i = 0; i < maxLines; i++) {
+    final presentName = i < presentStudents.length
+        ? presentStudents[i].name
+        : '';
+    final absentName = i < absentStudents.length
+        ? absentStudents[i].name
+        : '';
+    
+    buffer.writeln('"$presentName","$absentName"');
+  }
+  
+  // Add totals
+  buffer.writeln('');
+  buffer.writeln('Total Present,Total Absent,Total Students');
+  buffer.writeln('${presentStudents.length},${absentStudents.length},${allStudents.length}');
+  
+  return buffer.toString();
+}
