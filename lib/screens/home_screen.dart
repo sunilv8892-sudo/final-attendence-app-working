@@ -12,9 +12,9 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text(AppConstants.appName),
         elevation: 0,
+        flexibleSpace: Container(decoration: BoxDecoration(gradient: AppConstants.blueGradient)),
       ),
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppConstants.backgroundGradient),
+      body: AnimatedBackground(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppConstants.paddingMedium),
           child: Column(

@@ -13,11 +13,22 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   double _similarityThreshold = AppConstants.similarityThreshold;
+  bool? _enableVideo;
+  bool? _enableGradient;
 
   @override
   void initState() {
     super.initState();
     _loadThreshold();
+    _loadVisualPreferences();
+  }
+
+  Future<void> _loadVisualPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _enableVideo = prefs.getBool('enable_background_video') ?? false;
+      _enableGradient = prefs.getBool('enable_animated_gradient') ?? true;
+    });
   }
 
   Future<void> _loadThreshold() async {
@@ -37,8 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppConstants.backgroundGradient),
+      body: AnimatedBackground(
         child: SingleChildScrollView(
           child: Column(
             children: [
@@ -199,6 +209,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _infoRow('Matching Method:', 'Cosine Similarity'),
                         _infoRow('Embedding Dimension:', '192'),
                         _infoRow('Enrollment Samples:', '20-30'),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: AppConstants.paddingLarge),
+
+              // Visuals
+              _buildSettingsSection(
+                title: 'Visuals',
+                icon: Icons.palette,
+                child: Card(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: AppConstants.paddingMedium,
+                    vertical: AppConstants.paddingSmall,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppConstants.paddingLarge),
+                    child: Column(
+                      children: [
+                        SwitchListTile(
+                          title: const Text('Enable Background Video (opt-in)'),
+                          value: _enableVideo ?? false,
+                          onChanged: (v) async {
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setBool('enable_background_video', v);
+                            setState(() => _enableVideo = v);
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(v ? 'Background video enabled' : 'Background video disabled')));
+                          },
+                          secondary: const Icon(Icons.video_library),
+                        ),
+                        const Divider(height: 1, color: AppConstants.dividerColor),
+                        SwitchListTile(
+                          title: const Text('Enable Animated Gradient Background'),
+                          value: _enableGradient ?? true,
+                          onChanged: (v) async {
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setBool('enable_animated_gradient', v);
+                            setState(() => _enableGradient = v);
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(v ? 'Animated gradient enabled' : 'Animated gradient disabled')));
+                          },
+                          secondary: const Icon(Icons.gradient),
+                        ),
                       ],
                     ),
                   ),

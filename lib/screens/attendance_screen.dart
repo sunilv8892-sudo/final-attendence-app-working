@@ -9,12 +9,20 @@ import '../database/database_manager.dart';
 import '../models/face_detection_model.dart';
 import '../models/student_model.dart';
 import '../models/attendance_model.dart';
+import '../models/subject_model.dart';
 import '../modules/m1_face_detection.dart' as face_detection_module;
 import '../modules/m2_face_embedding.dart';
 import '../utils/constants.dart';
 
 class AttendanceScreen extends StatefulWidget {
-  const AttendanceScreen({super.key});
+  final String teacherName;
+  final Subject subject;
+
+  const AttendanceScreen({
+    super.key,
+    required this.teacherName,
+    required this.subject,
+  });
 
   @override
   State<AttendanceScreen> createState() => _AttendanceScreenState();
@@ -410,7 +418,48 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             content: Text('✅ Attendance submitted for $submitted students'),
           ),
         );
-        Navigator.pop(context);
+
+        // Show animated success, then close screen
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => Center(
+            child: Material(
+              color: Colors.transparent,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 700),
+                builder: (context, val, child) => Transform.scale(
+                  scale: val,
+                  child: child,
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [AppConstants.cardShadow],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle, size: 72, color: ColorSchemes.presentColor),
+                      const SizedBox(height: 12),
+                      Text('Attendance Saved', style: Theme.of(context).textTheme.titleLarge),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        Future.delayed(const Duration(milliseconds: 900), () {
+          if (mounted) {
+            Navigator.of(context).pop(); // close dialog
+            Navigator.of(context).pop(); // go back
+          }
+        });
       }
     } catch (e) {
       debugPrint('Submit error: $e');
@@ -433,6 +482,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       appBar: AppBar(
         title: const Text('Mark Attendance'),
         elevation: 0,
+        flexibleSpace: Container(decoration: BoxDecoration(gradient: AppConstants.blueGradient)),
         actions: [
           if (markedCount > 0)
             Padding(
@@ -460,10 +510,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: AppConstants.backgroundGradient,
-        ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _submitAttendance,
+        icon: const Icon(Icons.send),
+        label: const Text('Submit Attendance'),
+      ),
+      body: AnimatedBackground(
         child: Column(
           children: [
             // Camera Preview Section
@@ -685,7 +737,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                             final status = _attendanceStatus[student.id];
                             final isPresent =
                                 status == AttendanceStatus.present;
-                            return InkWell(
+                            final initials = student.name
+                                .split(' ')
+                                .where((s) => s.isNotEmpty)
+                                .map((s) => s[0])
+                                .take(2)
+                                .join();
+
+                            return GestureDetector(
                               onTap: () {
                                 setState(() {
                                   if (isPresent) {
@@ -696,50 +755,60 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                   }
                                 });
                               },
-                              child: Container(
-                                color: isPresent
-                                    ? ColorSchemes.presentColor.withAlpha(26)
-                                    : AppConstants.cardColor,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 280),
+                                margin: const EdgeInsets.symmetric(
+                                  vertical: 6,
+                                  horizontal: 8,
+                                ),
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: AppConstants.paddingMedium,
-                                  vertical: AppConstants.paddingSmall,
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isPresent
+                                      ? AppTheme.lightTheme.colorScheme.primary.withOpacity(0.06)
+                                      : AppTheme.lightTheme.colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: isPresent
+                                      ? [
+                                          BoxShadow(
+                                            color: ColorSchemes.presentColor.withOpacity(0.12),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ]
+                                      : [],
                                 ),
                                 child: Row(
                                   children: [
-                                    Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: isPresent
-                                            ? ColorSchemes.presentColor
-                                            : AppConstants.inputFill,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Icon(
-                                        isPresent
-                                            ? Icons.check_circle
-                                            : Icons.circle_outlined,
-                                        color: isPresent
-                                            ? Colors.white
-                                            : AppConstants.textTertiary,
-                                        size: 20,
+                                    CircleAvatar(
+                                      radius: 22,
+                                      backgroundColor: isPresent
+                                          ? ColorSchemes.presentColor
+                                          : AppConstants.inputFill,
+                                      child: Text(
+                                        initials.toUpperCase(),
+                                        style: TextStyle(
+                                          color: isPresent ? Colors.white : AppConstants.textTertiary,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                     ),
-                                    const SizedBox(
-                                      width: AppConstants.paddingMedium,
-                                    ),
+                                    const SizedBox(width: AppConstants.paddingMedium),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             student.name,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontWeight: FontWeight.w600,
                                               fontSize: 14,
+                                              color: Theme.of(context).textTheme.bodyLarge?.color,
                                             ),
                                           ),
+                                          const SizedBox(height: 4),
                                           Text(
                                             '${student.rollNumber} • ${student.className}',
                                             style: const TextStyle(
@@ -750,6 +819,27 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                         ],
                                       ),
                                     ),
+                                    AnimatedSwitcher(
+                                      duration: const Duration(milliseconds: 220),
+                                      transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                                      child: isPresent
+                                          ? Icon(
+                                              Icons.check_circle,
+                                              key: const ValueKey('present'),
+                                              color: ColorSchemes.presentColor,
+                                              size: 28,
+                                            )
+                                          : Icon(
+                                              Icons.radio_button_unchecked,
+                                              key: const ValueKey('absent'),
+                                              color: AppConstants.textTertiary,
+                                              size: 20,
+                                            ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                                     if (isPresent)
                                       Container(
                                         padding: const EdgeInsets.symmetric(

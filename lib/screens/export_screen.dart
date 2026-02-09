@@ -202,9 +202,8 @@ class _ExportScreenState extends State<ExportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Export Data')),
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppConstants.backgroundGradient),
+      appBar: AppBar(title: const Text('Export Data'), flexibleSpace: Container(decoration: BoxDecoration(gradient: AppConstants.blueGradient))),
+      body: AnimatedBackground(
         child: _isInitializing
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
