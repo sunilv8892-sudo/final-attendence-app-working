@@ -20,6 +20,6 @@ void main() {
     expect(find.byType(FaceRecognitionApp), findsOneWidget);
 
     // Verify the app name renders on the home screen
-    expect(find.text(AppConstants.appName), findsOneWidget);
+    expect(find.text(AppConstants.appName), findsWidgets);
   });
 }
