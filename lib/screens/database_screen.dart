@@ -3,6 +3,7 @@ import '../database/database_manager.dart';
 import '../modules/m4_attendance_management.dart';
 import '../models/attendance_model.dart';
 import '../utils/constants.dart';
+import '../widgets/animated_background.dart';
 
 class DatabaseScreen extends StatefulWidget {
   const DatabaseScreen({super.key});
@@ -49,6 +50,9 @@ class _DatabaseScreenState extends State<DatabaseScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Attendance Dashboard'),
+        flexibleSpace: Container(
+          decoration: BoxDecoration(gradient: AppConstants.blueGradient),
+        ),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -58,8 +62,7 @@ class _DatabaseScreenState extends State<DatabaseScreen>
           ],
         ),
       ),
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppConstants.backgroundGradient),
+      body: AnimatedBackground(
         child: TabBarView(
           controller: _tabController,
           children: [_buildOverviewTab(), _buildEnrolledStudentsTab(), _buildTodayTab()],

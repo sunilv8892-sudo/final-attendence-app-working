@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../database/database_manager.dart';
 import '../models/subject_model.dart';
 import '../utils/constants.dart';
+import '../widgets/animated_background.dart';
 import 'attendance_screen.dart';
 
 class AttendancePrepScreen extends StatefulWidget {
@@ -147,11 +148,11 @@ class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
         title: const Text('Attendance Setup'),
         elevation: 0,
         centerTitle: true,
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: AppConstants.backgroundGradient,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(gradient: AppConstants.blueGradient),
         ),
+      ),
+      body: AnimatedBackground(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [

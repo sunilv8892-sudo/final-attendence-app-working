@@ -10,6 +10,7 @@ import '../models/embedding_model.dart';
 import '../modules/m1_face_detection.dart' as face_detection_module;
 import '../modules/m2_face_embedding.dart';
 import '../utils/constants.dart';
+import '../widgets/animated_background.dart';
 
 class EnrollmentScreen extends StatefulWidget {
   const EnrollmentScreen({super.key});
@@ -443,9 +444,13 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     final canCapture = isReady && _embedderReady;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Enroll Student')),
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppConstants.backgroundGradient),
+      appBar: AppBar(
+        title: const Text('Enroll Student'),
+        flexibleSpace: Container(
+          decoration: BoxDecoration(gradient: AppConstants.blueGradient),
+        ),
+      ),
+      body: AnimatedBackground(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppConstants.paddingMedium),
           child: Column(
