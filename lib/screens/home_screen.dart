@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
+import '../widgets/animated_background.dart';
 
 /// Home Screen (Page 1)
 /// Main navigation hub with buttons to all features

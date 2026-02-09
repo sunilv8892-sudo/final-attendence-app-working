@@ -14,6 +14,7 @@ import 'package:share_plus/share_plus.dart';
 import '../database/database_manager.dart';
 import '../modules/m4_attendance_management.dart';
 import '../utils/constants.dart';
+import '../widgets/animated_background.dart';
 
 class ExportScreen extends StatefulWidget {
   const ExportScreen({super.key});

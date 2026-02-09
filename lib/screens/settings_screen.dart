@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
+import '../widgets/animated_background.dart';
 
 /// Settings Screen
 /// Configure app behavior and access information

@@ -13,6 +13,7 @@ import '../models/subject_model.dart';
 import '../modules/m1_face_detection.dart' as face_detection_module;
 import '../modules/m2_face_embedding.dart';
 import '../utils/constants.dart';
+import '../widgets/animated_background.dart';
 
 class AttendanceScreen extends StatefulWidget {
   final String teacherName;
@@ -735,8 +736,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                           itemBuilder: (context, index) {
                             final student = _enrolledStudents[index];
                             final status = _attendanceStatus[student.id];
-                            final isPresent =
-                                status == AttendanceStatus.present;
+                            final isPresent = status == AttendanceStatus.present;
                             final initials = student.name
                                 .split(' ')
                                 .where((s) => s.isNotEmpty)
@@ -750,25 +750,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                   if (isPresent) {
                                     _attendanceStatus.remove(student.id);
                                   } else {
-                                    _attendanceStatus[student.id!] =
-                                        AttendanceStatus.present;
+                                    _attendanceStatus[student.id!] = AttendanceStatus.present;
                                   }
                                 });
                               },
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 280),
-                                margin: const EdgeInsets.symmetric(
-                                  vertical: 6,
-                                  horizontal: 8,
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
+                                margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 decoration: BoxDecoration(
-                                  color: isPresent
-                                      ? AppTheme.lightTheme.colorScheme.primary.withOpacity(0.06)
-                                      : AppTheme.lightTheme.colorScheme.surface,
+                                  color: isPresent ? ColorSchemes.presentColor.withOpacity(0.08) : AppConstants.cardColor,
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: isPresent
                                       ? [
@@ -776,7 +767,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                             color: ColorSchemes.presentColor.withOpacity(0.12),
                                             blurRadius: 8,
                                             offset: const Offset(0, 2),
-                                          ),
+                                          )
                                         ]
                                       : [],
                                 ),
@@ -784,38 +775,17 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                   children: [
                                     CircleAvatar(
                                       radius: 22,
-                                      backgroundColor: isPresent
-                                          ? ColorSchemes.presentColor
-                                          : AppConstants.inputFill,
-                                      child: Text(
-                                        initials.toUpperCase(),
-                                        style: TextStyle(
-                                          color: isPresent ? Colors.white : AppConstants.textTertiary,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
+                                      backgroundColor: isPresent ? ColorSchemes.presentColor : AppConstants.inputFill,
+                                      child: Text(initials.toUpperCase(), style: TextStyle(color: isPresent ? Colors.white : AppConstants.textTertiary, fontWeight: FontWeight.w700)),
                                     ),
                                     const SizedBox(width: AppConstants.paddingMedium),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            student.name,
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 14,
-                                              color: Theme.of(context).textTheme.bodyLarge?.color,
-                                            ),
-                                          ),
+                                          Text(student.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                                           const SizedBox(height: 4),
-                                          Text(
-                                            '${student.rollNumber} • ${student.className}',
-                                            style: const TextStyle(
-                                              color: AppConstants.textTertiary,
-                                              fontSize: 12,
-                                            ),
-                                          ),
+                                          Text('${student.rollNumber} • ${student.className}', style: const TextStyle(color: AppConstants.textTertiary, fontSize: 12)),
                                         ],
                                       ),
                                     ),
@@ -823,44 +793,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                       duration: const Duration(milliseconds: 220),
                                       transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
                                       child: isPresent
-                                          ? Icon(
-                                              Icons.check_circle,
-                                              key: const ValueKey('present'),
-                                              color: ColorSchemes.presentColor,
-                                              size: 28,
-                                            )
-                                          : Icon(
-                                              Icons.radio_button_unchecked,
-                                              key: const ValueKey('absent'),
-                                              color: AppConstants.textTertiary,
-                                              size: 20,
-                                            ),
+                                          ? Icon(Icons.check_circle, key: const ValueKey('present'), color: ColorSchemes.presentColor, size: 28)
+                                          : Icon(Icons.radio_button_unchecked, key: const ValueKey('absent'), color: AppConstants.textTertiary, size: 20),
                                     ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                                    if (isPresent)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: ColorSchemes.presentColor,
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Present',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
                                   ],
                                 ),
                               ),

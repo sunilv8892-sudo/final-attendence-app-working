@@ -18,6 +18,7 @@ class AnimatedBackground extends StatefulWidget {
 class _AnimatedBackgroundState extends State<AnimatedBackground> {
   VideoPlayerController? _controller;
   bool _useVideo = false;
+  bool _useGradient = true;
 
   @override
   void initState() {
@@ -28,6 +29,8 @@ class _AnimatedBackgroundState extends State<AnimatedBackground> {
   Future<void> _loadPreference() async {
     final prefs = await SharedPreferences.getInstance();
     final enabled = prefs.getBool('enable_background_video') ?? false;
+    final gradientEnabled = prefs.getBool('enable_animated_gradient') ?? true;
+    _useGradient = gradientEnabled;
     if (enabled) {
       // try to load a bundled asset video
       try {
@@ -37,7 +40,9 @@ class _AnimatedBackgroundState extends State<AnimatedBackground> {
           ..setLooping(true)
           ..setVolume(0.0)
           ..play();
-        setState(() => _useVideo = true);
+        setState(() {
+          _useVideo = true;
+        });
       } catch (_) {
         // if asset missing, fallback to gradient
         _controller?.dispose();
@@ -67,8 +72,10 @@ class _AnimatedBackgroundState extends State<AnimatedBackground> {
               child: VideoPlayer(_controller!),
             ),
           )
+        else if (_useGradient)
+          const _AnimatedGradient()
         else
-          const _AnimatedGradient(),
+          Container(color: Theme.of(context).colorScheme.surface),
         if (widget.isOverlay)
           Container(
             color: Theme.of(context).colorScheme.surface.withOpacity(0.6),
