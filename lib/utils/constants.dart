@@ -92,7 +92,7 @@ class AppConstants {
   );
 
   // Face Recognition Settings
-  static const double similarityThreshold = 0.85;  // High threshold for accuracy
+  static const double similarityThreshold = 0.95;  // Very high threshold - prevent cross-matching between different people
   static const int requiredEnrollmentSamples = 20;  // Increased for better quality
   static const int recommendedEnrollmentSamples = 30;
   static const int embeddingDimension = 192;

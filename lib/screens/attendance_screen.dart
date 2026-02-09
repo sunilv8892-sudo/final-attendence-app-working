@@ -1,33 +1,20 @@
-import 'dart:io';
-import 'dart:typed_data';
-
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import 'package:camera/camera.dart';
+import 'dart:typed_data';
 import 'package:image/image.dart' as img;
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../database/database_manager.dart';
 import '../models/face_detection_model.dart';
 import '../models/student_model.dart';
 import '../models/attendance_model.dart';
-import '../models/subject_model.dart';
 import '../modules/m1_face_detection.dart' as face_detection_module;
 import '../modules/m2_face_embedding.dart';
-import '../modules/m4_attendance_management.dart';
 import '../utils/constants.dart';
-import '../utils/csv_export_service.dart';
 
 class AttendanceScreen extends StatefulWidget {
-  final String teacherName;
-  final Subject subject;
-
-  const AttendanceScreen({
-    super.key,
-    required this.teacherName,
-    required this.subject,
-  });
+  const AttendanceScreen({super.key});
 
   @override
   State<AttendanceScreen> createState() => _AttendanceScreenState();
@@ -46,7 +33,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   final Map<int, List<List<double>>> _studentEmbeddings = {};
   bool _isProcessing = false;
   bool _isScanning = false;
-  bool _isInitializing = true;  // Add this
   final Map<int, AttendanceStatus> _attendanceStatus = {};
   DateTime? _attendanceDate;
   double _similarityThreshold = 0.85;  // High threshold (85%) for max accuracy
@@ -57,46 +43,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   int? _lastDetectedStudentId;
   int _consecutiveDetections = 0;
   static const int _requiredConsecutiveDetections = 3; // Require 3 consecutive matches for extra safety
-  
-  // Face detection visual tracking
-  DetectedFace? _currentDetectedFace;
-  Student? _currentMatchedStudent;
-  bool _isCurrentFaceMarked = false;
-  Size? _lastImageSize; // Store image size for coordinate scaling
-  DateTime? _markedAtTime; // Track when attendance was marked to auto-clear after delay
 
   @override
   void initState() {
     super.initState();
     _initialize();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Reload enrolled students when screen comes back into focus
-    // (in case embeddings were deleted in database screen)
-    _reloadEnrolledStudents();
-  }
-
-  Future<void> _reloadEnrolledStudents() async {
-    try {
-      final students = await _dbManager.getEnrolledStudents();
-      if (students.length != _enrolledStudents.length) {
-        debugPrint('🔄 Refreshing enrolled students (count changed: ${_enrolledStudents.length} → ${students.length})');
-        _enrolledStudents = students;
-        
-        // Reload embeddings for all students
-        _studentEmbeddings.clear();
-        for (final student in _enrolledStudents) {
-          final embeddings = await _dbManager.getEmbeddingsForStudent(student.id!);
-          _studentEmbeddings[student.id!] = embeddings.map((e) => e.vector).toList();
-          debugPrint('   Reloaded ${student.name}: ${embeddings.length} embeddings');
-        }
-      }
-    } catch (e) {
-      debugPrint('⚠️ Error reloading enrolled students: $e');
-    }
   }
 
   @override
@@ -109,10 +60,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Future<void> _initialize() async {
     try {
-      // Load threshold from SharedPreferences with default fallback
+      // Load similarity threshold from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       _similarityThreshold = prefs.getDouble('similarity_threshold') ?? 0.85;
-      debugPrint('📊 Using similarity threshold: $_similarityThreshold');
+      debugPrint('📊 Loaded similarity threshold: $_similarityThreshold');
 
       _dbManager = DatabaseManager();
       await _dbManager.database;
@@ -130,8 +81,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       _faceEmbedder = FaceEmbeddingModule();
       await _faceEmbedder.initialize();
 
-      // Load enrolled students (those with embeddings) and their embeddings
-      _enrolledStudents = await _dbManager.getEnrolledStudents();
+      // Load enrolled students and their embeddings
+      _enrolledStudents = await _dbManager.getAllStudents();
       debugPrint('📚 Loaded ${_enrolledStudents.length} enrolled students');
 
       for (final student in _enrolledStudents) {
@@ -148,20 +99,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       // Normalize to midnight (no time component) for consistent date matching
       _attendanceDate = DateTime(_attendanceDate!.year, _attendanceDate!.month, _attendanceDate!.day);
       await _initCamera();
-      if (mounted) {
-        setState(() {
-          _isInitializing = false;
-        });
-      }
+      if (mounted) setState(() {});
     } catch (e) {
       debugPrint('Init error: $e');
       if (mounted) {
-        setState(() {
-          _isInitializing = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -220,6 +164,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Future<void> _scanFace() async {
     if (_controller == null || !_controller!.value.isInitialized) return;
     if (_isProcessing) return;
+
     _isProcessing = true;
 
     try {
@@ -228,46 +173,31 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       final rawImage = img.decodeImage(bytes);
 
       if (rawImage != null) {
-        _lastImageSize = Size(rawImage.width.toDouble(), rawImage.height.toDouble());
         debugPrint('📸 Scanning face: ${rawImage.width}x${rawImage.height}');
 
+        // Detect face
         final detections = await _detectFaceWithMlKit(bytes);
         if (detections.isEmpty) {
           debugPrint('❌ No face detected');
-          _currentDetectedFace = null;
-          if (!_isCurrentFaceMarked) {
-            _currentMatchedStudent = null;
-          }
-          if (mounted) setState(() {});
           return;
         }
 
-        // Check if marked display should auto-clear
-        if (_isCurrentFaceMarked && _markedAtTime != null) {
-          if (DateTime.now().difference(_markedAtTime!).inMilliseconds > 2500) {
-            _isCurrentFaceMarked = false;
-            _currentMatchedStudent = null;
-            _markedAtTime = null;
-          }
-        }
-
+        // Take largest face
         detections.sort(
           (a, b) => (b.width * b.height).compareTo(a.width * a.height),
         );
         final face = detections.first;
-        _currentDetectedFace = face;
 
+        // Validate face size (must be at least 80x80)
         if (face.width < 80 || face.height < 80) {
           debugPrint('⚠️ Face too small: ${face.width.toInt()}x${face.height.toInt()}');
           _consecutiveDetections = 0;
           _lastDetectedStudentId = null;
-          if (!_isCurrentFaceMarked) {
-            _currentMatchedStudent = null;
-          }
           if (mounted) setState(() {});
           return;
         }
 
+        // Crop and generate embedding
         final croppedFace = _cropFace(rawImage, face);
         final embedding = await _generateEmbedding(croppedFace);
 
@@ -275,42 +205,36 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           debugPrint('❌ Failed to generate embedding');
           _consecutiveDetections = 0;
           _lastDetectedStudentId = null;
-          if (!_isCurrentFaceMarked) {
-            _currentMatchedStudent = null;
-          }
           if (mounted) setState(() {});
           return;
         }
 
+        // Find matching student with similarity check
         final match = _findMatchingStudent(embedding);
         if (match != null) {
-          if (!_isCurrentFaceMarked) {
-            _currentMatchedStudent = match;
-          }
-
+          // Check if it's the same person as last detection
           if (match.id == _lastDetectedStudentId) {
             _consecutiveDetections++;
           } else {
+            // Different person, reset counter and start new sequence
             _consecutiveDetections = 1;
             _lastDetectedStudentId = match.id;
           }
 
+          // If we have enough consecutive detections, mark attendance
           if (_consecutiveDetections >= _requiredConsecutiveDetections) {
             final now = DateTime.now();
             final lastTime = _lastDetectionTime[match.id] ?? DateTime(2000);
-
+            
             if (now.difference(lastTime) >= _detectionCooldown) {
               debugPrint('✅ ${match.name} marked present (confirmed)');
               _lastDetectionTime[match.id!] = now;
               _consecutiveDetections = 0;
               _lastDetectedStudentId = null;
-
+              
               if (mounted) {
                 setState(() {
                   _attendanceStatus[match.id!] = AttendanceStatus.present;
-                  _isCurrentFaceMarked = true;
-                  _currentMatchedStudent = match;
-                  _markedAtTime = DateTime.now();
                 });
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -319,6 +243,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     duration: const Duration(milliseconds: 800),
                   ),
                 );
+                // Speak the attendance confirmation
                 _speakAttendanceConfirmation(match.name);
               }
             }
@@ -328,22 +253,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         } else {
           _consecutiveDetections = 0;
           _lastDetectedStudentId = null;
-          if (!_isCurrentFaceMarked) {
-            _currentMatchedStudent = null;
-          }
           if (mounted) setState(() {});
         }
       }
     } catch (e) {
       debugPrint('Scan error: $e');
-      _currentDetectedFace = null;
-      _currentMatchedStudent = null;
-      _isCurrentFaceMarked = false;
-      _markedAtTime = null;
     } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-      }
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -367,10 +283,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   void _stopScanning() {
     _isScanning = false;
-    _currentDetectedFace = null;
-    _currentMatchedStudent = null;
-    _isCurrentFaceMarked = false;
-    _markedAtTime = null;
     if (mounted) setState(() {});
   }
 
@@ -479,18 +391,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
     try {
       int submitted = 0;
-      
-      // First, insert the teacher session
-      await _dbManager.insertTeacherSession(
-        TeacherSession(
-          teacherName: widget.teacherName,
-          subjectId: widget.subject.id ?? 0,
-          subjectName: widget.subject.name,
-          date: _attendanceDate!,
-        ),
-      );
-      
-      // Then insert attendance records
       for (final entry in _attendanceStatus.entries) {
         await _dbManager.insertAttendance(
           AttendanceRecord(
@@ -503,51 +403,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         );
         submitted++;
       }
-      
-      // Generate CSV report
-      try {
-        await CsvExportService.generateAndSaveAttendanceReport(
-          teacherName: widget.teacherName,
-          subjectName: widget.subject.name,
-          attendanceDate: _attendanceDate!,
-          attendanceStatus: _attendanceStatus,
-          enrolledStudents: _enrolledStudents,
-        );
-
-        // Also generate subject attendance CSV (present/absent with totals)
-        final subjectCsv = await exportSubjectAttendanceAsCSV(
-          _dbManager,
-          widget.teacherName,
-          widget.subject.name,
-          _attendanceDate!,
-          sessionAttendance: _attendanceStatus,
-        );
-        final exportDir = await getApplicationDocumentsDirectory();
-        final dir = Directory('${exportDir.path}/FaceAttendanceExports');
-        await dir.create(recursive: true);
-        final timeStamp = DateTime.now().toIso8601String().replaceAll(
-          RegExp(r'[:\\.]'),
-          '-',
-        );
-        final filename =
-            '${widget.teacherName}_${widget.subject.name}_subject_$timeStamp.csv'
-                .replaceAll(' ', '_');
-        final file = File('${dir.path}/$filename');
-        await file.writeAsString(subjectCsv, flush: true);
-
-        // Backup to Downloads
-        try {
-          final downloadsDir = Directory('/storage/emulated/0/Download');
-          if (await downloadsDir.exists()) {
-            final downloadFile = File('${downloadsDir.path}/$filename');
-            await downloadFile.writeAsString(subjectCsv, flush: true);
-          }
-        } catch (_) {}
-      } catch (csvError) {
-        debugPrint('CSV generation warning: $csvError');
-        // Don't fail submission if CSV fails, just log it
-      }
-      
       debugPrint('✅ Attendance submitted for $submitted students');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -573,29 +428,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final markedCount = _attendanceStatus.values
         .where((s) => s == AttendanceStatus.present)
         .length;
-
-    // Show loading dialog while initializing
-    if (_isInitializing) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Mark Attendance'),
-          elevation: 0,
-        ),
-        body: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text(
-                'Initializing attendance system...',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
       appBar: AppBar(
@@ -663,18 +495,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       child: Stack(
                         children: [
                           CameraPreview(_controller!),
-                          // Face Detection Visual Overlay (always in tree for semantic stability)
-                          if (_currentDetectedFace != null && _lastImageSize != null)
-                            Positioned.fill(
-                              child: CustomPaint(
-                                painter: FaceDetectionPainter(
-                                  face: _currentDetectedFace,
-                                  studentName: _currentMatchedStudent?.name,
-                                  isMarked: _isCurrentFaceMarked,
-                                  imageSize: _lastImageSize,
-                                ),
-                              ),
-                            ),
                           // Processing Overlay
                           if (_isProcessing)
                             Container(
@@ -756,18 +576,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                               child: Container(
                                 decoration: BoxDecoration(
                                   color: Colors.black.withAlpha(153),
-                                shape: BoxShape.circle,
-                              ),
-                              child: IconButton(
-                                onPressed: _switchCamera,
-                                icon: const Icon(
-                                  Icons.cameraswitch,
-                                  color: Colors.white,
-                                  size: 24,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  onPressed: _switchCamera,
+                                  icon: const Icon(
+                                    Icons.cameraswitch,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ),
@@ -862,9 +682,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                           ),
                           itemBuilder: (context, index) {
                             final student = _enrolledStudents[index];
-                            if (student.id == null) {
-                              return SizedBox.shrink();
-                            }
                             final status = _attendanceStatus[student.id];
                             final isPresent =
                                 status == AttendanceStatus.present;
@@ -1026,169 +843,5 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 }
 
-/// Custom Painter for Face Detection Bounding Box and Mesh
-class FaceDetectionPainter extends CustomPainter {
-  final DetectedFace? face;
-  final String? studentName;
-  final bool isMarked;
-  final Size? imageSize;
+/// Custom Painter for Face Detection Bounding Box (Spider-Man Mask Style)
 
-  FaceDetectionPainter({
-    this.face,
-    this.studentName,
-    required this.isMarked,
-    this.imageSize,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Early return if no face or no image size (can't paint without them)
-    if (face == null || imageSize == null) {
-      return;
-    }
-
-    // Calculate scale factors from original image to canvas size
-    final scaleX = size.width / imageSize!.width;
-    final scaleY = size.height / imageSize!.height;
-    
-    // Scale the face coordinates to match the canvas
-    final scaledX = face!.x * scaleX;
-    final scaledY = face!.y * scaleY;
-    final scaledWidth = face!.width * scaleX;
-    final scaledHeight = face!.height * scaleY;
-    
-    // Determine color based on marking status
-    final boxColor = isMarked ? Colors.green : Colors.red;
-    
-    // Draw the bounding box
-    final paint = Paint()
-      ..color = boxColor
-      ..strokeWidth = 3.0
-      ..style = PaintingStyle.stroke;
-
-    final rect = Rect.fromLTWH(
-      scaledX,
-      scaledY,
-      scaledWidth,
-      scaledHeight,
-    );
-
-    // Draw main rectangle
-    canvas.drawRect(rect, paint);
-
-    // Draw corner brackets (Spider-Man mask style)
-    final cornerLength = 20.0;
-    final cornerPaint = Paint()
-      ..color = boxColor
-      ..strokeWidth = 4.0
-      ..style = PaintingStyle.stroke;
-
-    // Top-left corner
-    canvas.drawLine(
-      Offset(rect.left, rect.top),
-      Offset(rect.left + cornerLength, rect.top),
-      cornerPaint,
-    );
-    canvas.drawLine(
-      Offset(rect.left, rect.top),
-      Offset(rect.left, rect.top + cornerLength),
-      cornerPaint,
-    );
-
-    // Top-right corner
-    canvas.drawLine(
-      Offset(rect.right, rect.top),
-      Offset(rect.right - cornerLength, rect.top),
-      cornerPaint,
-    );
-    canvas.drawLine(
-      Offset(rect.right, rect.top),
-      Offset(rect.right, rect.top + cornerLength),
-      cornerPaint,
-    );
-
-    // Bottom-left corner
-    canvas.drawLine(
-      Offset(rect.left, rect.bottom),
-      Offset(rect.left + cornerLength, rect.bottom),
-      cornerPaint,
-    );
-    canvas.drawLine(
-      Offset(rect.left, rect.bottom),
-      Offset(rect.left, rect.bottom - cornerLength),
-      cornerPaint,
-    );
-
-    // Bottom-right corner
-    canvas.drawLine(
-      Offset(rect.right, rect.bottom),
-      Offset(rect.right - cornerLength, rect.bottom),
-      cornerPaint,
-    );
-    canvas.drawLine(
-      Offset(rect.right, rect.bottom),
-      Offset(rect.right, rect.bottom - cornerLength),
-      cornerPaint,
-    );
-
-    // Draw student name if matched and marked
-    if (studentName != null && isMarked) {
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: studentName,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            shadows: [
-              Shadow(
-                blurRadius: 4,
-                color: Colors.black45,
-                offset: Offset(1, 1),
-              ),
-            ],
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      );
-      textPainter.layout();
-
-      // Draw name above the face box
-      final nameOffset = Offset(
-        rect.center.dx - textPainter.width / 2,
-        rect.top - textPainter.height - 8,
-      );
-
-      // Draw background for text
-      final bgPaint = Paint()
-        ..color = Colors.green.withAlpha(200);
-      
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(
-            nameOffset.dx - 8,
-            nameOffset.dy - 4,
-            textPainter.width + 16,
-            textPainter.height + 8,
-          ),
-          const Radius.circular(4),
-        ),
-        bgPaint,
-      );
-
-      textPainter.paint(canvas, nameOffset);
-    }
-  }
-
-  @override
-  bool shouldRepaint(FaceDetectionPainter oldDelegate) {
-    return oldDelegate.face != face ||
-        oldDelegate.studentName != studentName ||
-        oldDelegate.isMarked != isMarked;
-  }
-
-  @override
-  bool shouldRebuildSemantics(FaceDetectionPainter oldDelegate) {
-    return false; // Prevent semantic rebuilds for CustomPaint
-  }
-}

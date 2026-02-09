@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'database/database_manager.dart';
 import 'screens/home_screen.dart';
 import 'screens/enrollment_screen.dart';
-import 'screens/attendance_screen.dart';
+import 'screens/attendance_prep_screen.dart';
 import 'screens/database_screen.dart';
 import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
@@ -48,7 +48,7 @@ class FaceRecognitionApp extends StatelessWidget {
       routes: {
         AppConstants.routeHome: (context) => const HomeScreen(),
         AppConstants.routeEnroll: (context) => const EnrollmentScreen(),
-        AppConstants.routeAttendance: (context) => const AttendanceScreen(),
+        AppConstants.routeAttendance: (context) => const AttendancePrepScreen(),
         AppConstants.routeDatabase: (context) => const DatabaseScreen(),
         AppConstants.routeExport: (context) => const ExportScreen(),
         AppConstants.routeSettings: (context) => const SettingsScreen(),

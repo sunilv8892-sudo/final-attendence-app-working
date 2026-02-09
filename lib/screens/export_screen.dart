@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -160,39 +161,23 @@ class _ExportScreenState extends State<ExportScreen> {
   }
 
   Future<void> _shareLastExport() async {
-    final latestFile = await _getLatestExportFile();
-    if (latestFile == null) {
+    if (_history.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No exports available to share')),
       );
       return;
     }
-
-    await Share.shareXFiles([
-      XFile(latestFile.path),
-    ], text: 'Face Attendance Export: ${p.basename(latestFile.path)}');
-  }
-
-  Future<File?> _getLatestExportFile() async {
-    // Ensure export directory is ready
-    if (_exportDirectory == null) {
-      await _setupExportEnvironment();
+    final last = _history.first; // Most recent
+    final file = File(last.path);
+    if (await file.exists()) {
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], text: 'Face Attendance Export: ${last.format}');
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('File not found')));
     }
-
-    final dir = _exportDirectory;
-    if (dir == null || !dir.existsSync()) return null;
-
-    final files = dir
-        .listSync()
-        .whereType<File>()
-        .toList()
-      ..sort((a, b) {
-        final aStat = FileStat.statSync(a.path).modified;
-        final bStat = FileStat.statSync(b.path).modified;
-        return bStat.compareTo(aStat);
-      });
-
-    return files.isNotEmpty ? files.first : null;
   }
 
   /// Returns true if saved into public Downloads (Android MediaStore), false otherwise.
@@ -273,14 +258,6 @@ class _ExportScreenState extends State<ExportScreen> {
                               onPressed: _isExporting
                                   ? null
                                   : () => _exportData('CSV'),
-                            ),
-                            const SizedBox(height: AppConstants.paddingSmall),
-                            _exportButton(
-                              icon: Icons.subject,
-                              label: 'Subject Attendance (CSV)',
-                              onPressed: _isExporting
-                                  ? null
-                                  : () => _exportSubjectAttendance(),
                             ),
                             const SizedBox(height: AppConstants.paddingSmall),
                             _exportButton(
@@ -418,6 +395,24 @@ class _ExportScreenState extends State<ExportScreen> {
         );
   }
 
+  Widget _glassCard({required Widget child}) {
+    return Card(
+      color: Colors.white.withAlpha((0.18 * 255).round()),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: child,
+        ),
+      ),
+    );
+  }
+
   Widget _exportButton({
     required IconData icon,
     required String label,
@@ -471,99 +466,6 @@ class _ExportScreenState extends State<ExportScreen> {
     final hour = timestamp.hour.toString().padLeft(2, '0');
     final minute = timestamp.minute.toString().padLeft(2, '0');
     return '$year-$month-$day $hour:$minute';
-  }
-
-  Future<void> _exportSubjectAttendance() async {
-    if (_isExporting || _exportDirectory == null) return;
-    
-    setState(() => _isExporting = true);
-
-    try {
-      // Get all teacher sessions for today
-      final today = DateTime.now();
-      final sessions = await _dbManager.getTeacherSessionsByDate(today);
-
-      if (sessions.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Saved to downloads successfully'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        setState(() => _isExporting = false);
-        return;
-      }
-
-      // Export for each session
-      for (final session in sessions) {
-        final csv = await exportSubjectAttendanceAsCSV(
-          _dbManager,
-          session.teacherName,
-          session.subjectName,
-          session.date,
-        );
-
-        final timeStamp = DateTime.now().toIso8601String().replaceAll(
-          RegExp(r'[:\\.]'),
-          '-',
-        );
-        final filename =
-            '${session.teacherName}_${session.subjectName}_$timeStamp.csv'
-                .replaceAll(' ', '_');
-        final file = File('${_exportDirectory!.path}/$filename');
-
-        await file.writeAsString(csv, flush: true);
-
-        // Save to Downloads as backup
-        try {
-          final downloadsDir = Directory('/storage/emulated/0/Download');
-          if (await downloadsDir.exists()) {
-            final downloadFile = File('${downloadsDir.path}/$filename');
-            await downloadFile.writeAsString(csv, flush: true);
-          }
-        } catch (e) {
-          debugPrint('⚠️ Could not save to Downloads: $e');
-        }
-
-        final record = ExportRecord(
-          format: 'SUBJECT_ATTENDANCE',
-          path: file.path,
-          timestamp: DateTime.now(),
-        );
-
-        if (mounted) {
-          setState(() {
-            _history.insert(0, record);
-          });
-        }
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '✅ Subject attendance exported (${sessions.length} session${sessions.length > 1 ? 's' : ''})',
-            ),
-            backgroundColor: AppConstants.successColor,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Subject attendance export error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Export failed: $e'),
-            backgroundColor: AppConstants.errorColor,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isExporting = false);
-    }
   }
 
   Future<void> _exportData(String format) async {

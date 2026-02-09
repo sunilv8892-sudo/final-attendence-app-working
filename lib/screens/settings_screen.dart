@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
-import '../database/database_manager.dart';
 
 /// Settings Screen
 /// Configure app behavior and access information
@@ -13,7 +12,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final DatabaseManager _dbManager = DatabaseManager();
   double _similarityThreshold = AppConstants.similarityThreshold;
 
   @override
@@ -415,12 +413,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Navigator.pop(context);
 
               try {
-                final db = await _dbManager.database;
-
-                // Clear all tables
-                await db.delete(db.students).go();
-                await db.delete(db.faceEmbeddings).go();
-                await db.delete(db.attendance).go();
+                // Clear all SharedPreferences data
+                final prefs = await SharedPreferences.getInstance();
+                
+                // Delete all stored data
+                await prefs.remove('students');
+                await prefs.remove('embeddings');
+                await prefs.remove('attendance');
+                await prefs.remove('subjects');
+                await prefs.remove('teacherSessions');
 
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
