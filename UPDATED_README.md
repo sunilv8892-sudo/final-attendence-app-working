@@ -1,419 +1,125 @@
-# 🚀 Multi-Model Real-Time Mobile Vision Engine (Updated)
+# 🚀 Multi-Model Real-Time Attendance Engine (Updated)
 
-This is a **production-ready Flutter application** built for robust, real-time object detection, classifier inference, and face recognition on mobile hardware. The codebase focuses on **low-latency inference**, **modular model swapping**, and **accurate overlay rendering** for a seamless attendance experience.
+This Flutter application runs entirely on-device to detect faces, generate embeddings, match against a registry, and mark attendance in real time. It combines **ML Kit / MediaPipe**, **AdaFace-Mobile embeddings**, and a lightweight **SharedPreferences-backed session store**, giving a privacy-first, low-latency experience.
 
 **Status:** ✅ Fully Functional | 🎯 Feature-Complete | 📱 Mobile Optimized
-
-![Flutter](https://img.shields.io/badge/Flutter-3.x-blue?logo=flutter)
-![Dart](https://img.shields.io/badge/Dart-3.x-blue?logo=dart)
-![TFLite](https://img.shields.io/badge/TensorFlow%20Lite-Supported-orange?logo=tensorflow)
-![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
 
 ## ✨ Key Features
+- **ML Kit / MediaPipe face detection** (fast mode) that runs on the still captured by `takePicture()` so bounding boxes stay aligned with the preview without manual rotation hacks.
+- **AdaFace-Mobile embeddings** (512-D) powered by `tflite_flutter`, normalized, and matched via cosine similarity for identity recognition.
+- **Blink-based liveness detection** (Optional M5) that confirms users are live before reporting critical attendance states.
+- **SharedPreferences-backed `DatabaseManager`** that stores students, embeddings, attendance, subjects, and teacher sessions without requiring Drift code generation.
+- **Accurate overlay rendering** via `BoxFit.cover`, scaled face rectangles, and single-step mirroring for front cameras—no calibration sliders needed.
 
-#
-### 🧱 System Architecture Overview
-- **Camera Capture**: `camera` plugin streams YUV frames, but inference runs from high-resolution stills (`takePicture()`) so ML Kit faces stay aligned with JPEG EXIF orientation.
-- **Detection Stage**: A TensorFlow Lite YOLO model performs fast object/face bounding box generation; those rectangles feed directly into the secondary stage without extra rotation logic.
-- **Secondary Models**: Depending on the selected mode, the app swaps between:
-  - **Classifier Mode**: A compact TFLite classifier (sub-10MB) for emotion or state labels; this is fast (~2ms) and deterministic compared to statistical APIs.
-  - **Embedding Mode**: A high-dimensional face embedding (AdaFace-inspired) matched via cosine similarity for reliable identity recognition across lighting and pose.
-- **Rendering Layer**: The preview now uses `FittedBox(fit: BoxFit.cover)` so the display matches the image coordinates, and the overlay simply scales the ML Kit face box (no `sensorOrientation` transforms) before applying a mirror transform for the front camera.
-- **Persistence & UI**: `_setOverlay()` draws the green/red circle, manages auto-dismiss timers, and attendance is saved per session namespace in SharedPreferences.
+## 🧱 System Architecture (M1–M5)
+1. **Capture** – `attendance_screen.dart` shows a live preview but runs inference on the high-resolution still that is already upright thanks to camera EXIF handling.
+2. **M1 – Face Detection Module**: wraps Google ML Kit (MediaPipe) to return `DetectedFace` bounding boxes and head pose estimates.
+3. **M2 – Face Embedding Module**: resizes the cropped face to 112×112, feeds it through AdaFace-Mobile (`assets/models/embedding_model.tflite`), and outputs a normalized 512-D vector.
+4. **M3 – Face Matching Module**: compares the incoming embedding with vectors stored in `DatabaseManager` using cosine similarity (or 1-NN) to determine whether the face is known and how confident the match is.
+5. **M4 – Attendance Flow**: recognized students trigger `_setOverlay()`, attendance state updates, and persistence under keys like `session_attendance_<teacher>_<subject>_<date>`.
+6. **M5 – Liveness Detection**: Optional blink detection (ear threshold + temporal pattern) runs over short image sequences to add an extra layer of trust.
 
-### 🎯 Model Choices & Trade-offs
-- **YOLO (TFLite)**: Selected for its single-shot speed and generalization. Alternatives like MobileNet SSD require anchor customization and have slightly higher latency on embedded CPUs.
-- **AdaFace-inspired Embedding**: Delivers better few-shot robustness vs. FaceNet, while remaining compact; inference stays under ~15ms even on mid-tier chips.
-- **Custom Classifier**: Chosen over ML Kit classification APIs to avoid extra billing, dependencies, and to keep the app fully offline.
-- **ML Kit Face Detection**: Used purely for bounding boxes because it already handles all rotation/EXIF concerns and provides optimized rectangles for Android/iOS.
+## 🎯 Model & Library Choices
+- **Google ML Kit (face detection)** vs. custom TFLite object detectors: ML Kit handles rotation/EXIF, runs well on Android/iOS, and avoids tuning anchors or writing custom rotation code.
+- **AdaFace-Mobile embeddings** vs. FaceNet/MobileFaceNet: AdaFace offers better few-shot robustness, fewer parameters, and faster inference (~15ms with 4 threads) while still producing high-dimensional vectors suitable for cosine similarity.
+- **Cosine similarity matcher** (M3) vs. more complex classifiers: the deterministic matcher keeps the pipeline explainable and easy to debug while requiring only the stored embeddings.
+- **SharedPreferences (`DatabaseManager`)** vs. Drift/SQLite: avoids migration headaches (see `face_recognition_database.dart` deprecation) by serializing JSON lists and playing well with Flutter’s lightweight storage story.
 
-### ⚙️ Why These Models Win
-1. **TensorFlow Lite vs. PyTorch Mobile**: TFLite integrates cleanly with Flutter, has smaller binaries, and exposes interpreter options that match the performance targets.
-2. **AdaFace vs. FaceNet**: AdaFace has fewer parameters, better generalization with limited per-user data, and matches quickly using cosine similarity.
-3. **On-Device Matching vs. Cloud APIs**: Keeps user data private, removes network latency, and eliminates recurring cloud costs.
+## 🛠️ Key Fixes & Improvements
+- **Face overlay accuracy** – `_buildFaceOverlay` now scales ML Kit rectangles through a single scale factor derived from `displaySize`, mirrors once for front cameras, and clamps the result so the circle stays on the face.
+- **Calibration-free UI** – Removed ratio-cycling buttons, `_calibX/_calibY`, and `_autoShiftX`, leaving a deterministic mapping math path.
+- **Documentation refresh** – This README now reflects the true ML Kit + AdaFace pipeline, model choices, persistence layer, and overlay fix.
 
-### 🛠️ Key Fixes & Improvements
-- **Face Overlay Accuracy**: Rebuilt the overlay so it scales ML Kit rectangles straight from the upright JPEG (`img.decodeImage`) into display coordinates, mirrors afterward, and uses `BoxFit.cover`. This fixed the chin/mouth shift without manual calibration.
-- **Calibration-free Experience**: Removed calibration sliders, ratio cycles, and auto-shift offsets because the new math keeps the circle centered.
-- **Documented Architecture & Fixes**: This README now explains the architecture, model trade-offs, and overlay changes so collaborators understand what happened and why it works.
-
-### ✅ Current Experience
-- Camera preview fills the card (via `ClipRRect` + `FittedBox.cover`).
-- `_scanFace()` captures a still, runs ML Kit detection, passes detections to either the classifier or embedding matcher, and calls `_setOverlay()`.
-- Attendance results saved using session keys like `session_attendance_teacher_subject_date`.
-- Debug logs print overlay mapping info (`🔧 Overlay:`) for investigation.
-
-### 🎯 **Real-Time YOLO Detection**
-- Detects objects/faces at 30+ FPS
-- GPU acceleration enabled
-- Configurable confidence threshold (0.1 - 0.9)
-- Live bounding box visualization
-
-### 🏷️ **Pluggable Secondary Models Framework**
-Unique architecture supports **multiple model types** without code refactoring:
-- **Classifier Mode** - Classify detected objects (me/not_me, emotions, etc.)
-- **Embedding Mode** - Face verification via cosine similarity
-- **Custom Models** - Easy to add your own via `SecondaryModel` interface
-
-### 👤 **Multi-Person Face Recognition**
-- Register multiple faces by name
-- Automatic face matching using embedding similarity
-- **Persistent storage** - Faces saved even after app closes
-- **Smooth prediction** - No flickering, stable labels
-- Adjustable threshold for sensitivity (0.7 default)
-
-### 🔒 **Persistent Storage**
-- Registered faces saved to phone's SharedPreferences
-- Auto-loaded on app startup
-- Survives app restart and phone reboot
-
-### ⚡ **Performance Optimized**
-- Frame skipping (process every 3rd frame)
-- Result caching to prevent label flickering
-- Prediction smoothing with voting window
-- Efficient YUV → RGB conversion
-
----
-
-## 🏗️ Architecture
-
-### Two-Stage Pipeline
-```
-Camera Feed (30 FPS)
-    ↓
-YOLO Detection (FlutterVision)
-    ↓ (extract face region)
-Secondary Model (pluggable)
-    ├─ Classifier → Label + Confidence
-    ├─ Embedding → Vector + Similarity Match
-    └─ Custom... (extensible)
-    ↓
-UI Rendering + Bounding Boxes
-```
-
-### Pluggable Framework Pattern
-```dart
-abstract class SecondaryModel {
-  Future<void> load();
-  Future<SecondaryResult> infer(img.Image crop);
-  void dispose();
-}
-
-// Classifier implementation
-class ClassifierModel implements SecondaryModel { ... }
-
-// Embedding implementation
-class EmbeddingModel implements SecondaryModel { ... }
-
-// Add your own model by implementing interface!
-```
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Flutter 3.10+
-- Android 7.0+ or iOS 11.0+
-- Models in `assets/models/`:
-  - `model.tflite` (YOLO detection)
-  - `labels.txt` (YOLO labels)
-  - `second_model.tflite` (classifier)
-  - `second_labels.txt` (classifier labels)
-  - `embedding_model.tflite` (face embeddings)
-
-### Installation
-```bash
-# Clone repository
-git clone https://github.com/sunilv8892-sudo/flutter-Real-time-mobile-vision-engine.git
-cd flutter-Real-time-mobile-vision-engine
-
-# Install dependencies
-flutter pub get
-
-# Run on device
-flutter run
-```
-
----
-
-## 📖 Usage Guide
-
-### Mode Selection
-Use the **dropdown at top-center** to switch between modes instantly:
-- 🟠 **Classifier** - Classification results
-- 🟣 **Embedding** - Face recognition
-
-### Classifier Mode
-1. Point at object/face
-2. See detected class + confidence
-3. Example: `person (happy 0.92)`
-
-### Embedding Mode (Face Recognition)
-
-#### Register a Face
-1. Point your face at camera
-2. Click **"Register Face"** button (bottom-left)
-3. Enter your name in dialog
-4. System saves your embedding
-
-#### Recognize Faces
-1. Point at any face
-2. System compares against registered faces
-3. Shows match name + similarity score
-4. Example: `person (SUNIL 0.88)` ✅ or `person (UNKNOWN 0.45)` ❌
-
-#### Data Persistence
-- Registered faces automatically saved to phone
-- Reopen app → Faces load automatically
-- **No retraining needed!**
-
----
-
-## ⚙️ Configuration
-
-### Detection Settings (Top Right)
-- **Confidence Threshold** - 0.1 to 0.9 (default: 0.25)
-- Lower = more detections but noisier
-- Higher = fewer but more confident detections
-
-### Embedding Settings (Code)
-Edit these in `lib/main.dart`:
-```dart
-double _embeddingThreshold = 0.7;        // Similarity threshold for match
-int _classifyEveryNFrames = 3;           // Process every Nth frame (performance)
-double _minSecondaryConfidence = 0.5;    // Min confidence for classifier
-int _smoothingWindow = 5;                // Prediction smoothing window size
-```
-
----
-
-## 🔧 Technical Details
-### Face Overlay Accuracy Fix
-- **Problem**: The camera preview used a fixed `AspectRatio` and the overlay logic rotated the bounding box based on sensor orientation, which double-rotated the ML Kit face rectangles and caused the circle to land on the chin/neck.
-- **Solution**: Camera preview now expands via `FittedBox(fit: BoxFit.cover)` so the rendered feed matches the display area, and the overlay mapping simply scales the ML Kit bounding box from the upright JPEG (`img.decodeImage`) to display coordinates (no rotation). The front camera mirror is applied after scaling, resulting in a stable, pixel-accurate circle around the face without manual calibration.
-
-### Algorithms Implemented
-
-#### Softmax Function
-Converts logits to probabilities:
-```dart
-List<double> softmax(List<double> x) {
-  double maxVal = x.reduce((a, b) => a > b ? a : b);
-  final exp = x.map((e) => math.exp(e - maxVal)).toList();
-  final sum = exp.reduce((a, b) => a + b);
-  return exp.map((e) => e / sum).toList();
-}
-```
-
-#### Cosine Similarity
-Compares embedding vectors (0 = different, 1 = identical):
-```dart
-double cosineSimilarity(List<double> a, List<double> b) {
-  double dot = 0, normA = 0, normB = 0;
-  for (int i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  return dot / (math.sqrt(normA) * math.sqrt(normB) + 1e-10);
-}
-```
-
-#### Prediction Smoothing
-Voting-based stability:
-```dart
-// Uses sliding window of predictions
-// Requires majority to change label
-// Prevents flickering from frame-to-frame noise
-```
-
-### Data Structure
-```dart
-Map<String, List<double>> registeredPeople = {
-  "Sunil": [0.124, 0.456, 0.789, ...],  // 192-dim embedding
-  "Rahul": [0.234, 0.567, 0.890, ...],
-};
-// Automatically saved to SharedPreferences as JSON
-```
-
----
+## ✅ Current Flow
+1. User opens `Mark Attendance` screen; camera preview fills the rounded card via `FittedBox.cover`.
+2. `_scanFace()` captures an image, sends bytes to `FaceDetectionModule`, crops the first face, and generates an AdaFace embedding.
+3. `FaceMatchingModule` compares the embedding with stored vectors (via `DatabaseManager`) and identifies the student (or marks as unknown).
+4. `_setOverlay()` paints the circle (green if recognized, red if not) and records attendance under the current session namespace.
+5. Optional liveness (M5) can run before accepting sensitive attendance states.
+6. Attendance stats and exports honor the session-based keys and appear in the UI (badges, export history, etc.).
 
 ## 📊 Performance Metrics
-
 | Metric | Value |
 |--------|-------|
-| **FPS** | 30+ (live) |
-| **Detection Latency** | ~30-50ms |
-| **Inference Time** | ~15-25ms (secondary model) |
-| **Memory** | ~100-150MB (peak) |
-| **Model Size** | ~50MB (YOLO + Classifier + Embedding) |
+| **FPS** | 30+ (preview) |
+| **Detection latency** | ~30–50ms (ML Kit) |
+| **Embedding inference** | ~15–25ms (AdaFace-Mobile) |
+| **Memory (peak)** | ~120MB |
+| **Model size** | ~20MB (`embedding_model.tflite` + ML Kit bundle) |
 
----
-
-## 🔍 Debugging
-
-### Enable Debug Output
-```dart
-_showDebugInfo = true;  // In _YoloDetectionPageState
-```
-
-### Console Messages
-```
-🔍 Embedding: dim=192                    // Embedding extracted
-📊 EMBEDDING RECOGNITION:                // Recognition output
-   Match: sunil (score: 0.928)          // Best match
-   → sunil: 0.928                        // Individual scores
-💾 Saved 1 faces to storage              // Persistence success
-📂 Loaded 1 faces from storage           // Loaded on startup
-```
-
----
-
-## 🛠️ Extending the Framework
-
-### Add Custom Classifier
-```dart
-class MyCustomClassifier implements SecondaryModel {
-  @override
-  Future<SecondaryResult> infer(img.Image crop) async {
-    // Your inference logic here
-    return SecondaryResult(
-      label: 'custom_result',
-      confidence: 0.95,
-    );
-  }
-  
-  // Implement other required methods...
-}
-```
-
-### Register Custom Model
-```dart
-SecondaryModel _createSecondaryModel(SecondaryModelType type) {
-  switch (type) {
-    case SecondaryModelType.classifier:
-      return ClassifierModel(...);
-    case SecondaryModelType.embedding:
-      return EmbeddingModel(...);
-    case SecondaryModelType.custom:  // NEW!
-      return MyCustomClassifier();
-  }
-}
-```
-
----
-
-## 📁 Project Structure
+## 🧩 Project Structure (simplified)
 ```
 lib/
-├── main.dart                    # Main app (1400+ lines)
-│   ├── Softmax function         # Probability conversion
-│   ├── Cosine similarity        # Embedding comparison
-│   ├── SecondaryModel interface # Abstract pattern
-│   ├── ClassifierModel          # Classification impl
-│   ├── EmbeddingModel           # Face verification impl
-│   ├── Persistence functions    # Storage/load
-│   └── UI (Camera, Detection, Mode switching)
-│
-assets/
-├── models/
-│   ├── model.tflite             # YOLO detection
-│   ├── labels.txt               # YOLO classes
-│   ├── second_model.tflite      # Classifier (optional)
-│   ├── second_labels.txt        # Classifier classes (optional)
-│   └── embedding_model.tflite   # Face embeddings
-│
-pubspec.yaml
-├── flutter
-├── camera: ^0.11.0+1
-├── flutter_vision: ^2.0.0
-├── tflite_flutter: ^0.11.0
-├── shared_preferences: ^2.2.0
-└── permission_handler: ^11.3.1
+├── main.dart                    # Entry point, UI wiring, app theming
+├── screens/
+│   ├── attendance_screen.dart   # Camera stack, overlay, attendance UI
+│   ├── enrollment_screen.dart   # Register a new face (captures + label)
+│   ├── export_screen.dart       # Export attendance history
+│   └── home_screen.dart         # Landing dashboard
+├── modules/
+│   ├── m1_face_detection.dart   # ML Kit detection helper
+│   ├── m2_face_embedding.dart    # AdaFace-Mobile inference
+│   ├── m3_face_matching.dart     # Cosine similarity matcher
+│   ├── m4_attendance_management.dart # Attendance session logic
+│   └── m5_liveness_detection.dart    # Blink-based live check
+├── database/
+│   └── database_manager.dart    # SharedPreferences persistence layer
+├── models/                      # DTOs for students, embeddings, attendance
+└── utils/                       # Helpers (constants, colors, logging)
 ```
 
----
-
-## 📋 Dependencies
+## ⚙️ Dependencies (excerpt)
 ```yaml
 dependencies:
   flutter:
     sdk: flutter
-  camera: ^0.11.0+1              # Camera streaming
-  flutter_vision: ^2.0.0          # YOLO detection
-  tflite_flutter: ^0.11.0         # TFLite inference
-  shared_preferences: ^2.2.0      # Persistent storage
-  permission_handler: ^11.3.1     # Camera permissions
-  image: ^4.0.0                   # Image processing
+  camera: ^0.11.0+1
+  google_ml_kit: ^0.18.0       # MediaPipe face detection
+  permission_handler: ^11.3.1
+  tflite_flutter: ^0.11.0      # AdaFace inference
+  image: ^4.0.0
+  shared_preferences: ^2.2.0
+  sqlite3_flutter_libs: ^0.5.15 # (unused but retained for future persistence)
+  drift: ^2.15.0                # (unused, replaced by SharedPreferences)
+  flutter_tts: ^4.2.5
+  vector_math: ^2.1.4
+  path_provider: ^2.0.15
+  pdf: ^3.11.0
+  share_plus: ^7.0.0
 ```
 
----
+## 🚀 Getting Started
+1. `git clone https://github.com/sunilv8892-sudo/final-attendence-app-working.git`
+2. `cd multi-model-support-yolo-main`
+3. `flutter pub get`
+4. `flutter run`
 
-## 🐛 Troubleshooting
+### Required assets
+- `assets/models/embedding_model.tflite` – AdaFace-Mobile embedding model (512-D vector).
+- `assets/models/blaze_face.tflite` – optional ML Kit or BlazeFace substitute if you want a custom detector.
+- `assets/models/labels.txt` – optional labels used by helper tools (not required at runtime).
+- `assets/videos/background.mp4`, `assets/lottie/success.json` – UI polish assets.
 
-### Models Not Found
-**Error:** `FileSystemException: models not found`
-- **Solution:** Place `.tflite` files in `assets/models/`
-- Update `pubspec.yaml` assets section
+## 🧰 Troubleshooting
+- **Face circle drifts** → Ensure `imageSize` updates after `takePicture()` (the overlay math depends on the decoded JPEG dimensions).
+- **Unknown results always** → Confirm the embedding model exists and `DatabaseManager` has stored embeddings (check `SharedPreferences` keys `embeddings`).
+- **ML Kit throws `FaceDetector` errors** → Grant camera permission via `permission_handler` before starting the camera.
+- **Debug logs missing** → Set `_showDebugInfo = true` inside `attendance_screen.dart` to print overlay metrics (`🔧 Overlay:`).
 
-### No Detections
-**Error:** `0 detections found`
-- **Solution:** Lower confidence threshold (0.1 - 0.2)
-- Ensure lighting is adequate
-- Check that model is appropriate for your objects
-
-### Embedding Always "UNKNOWN"
-**Error:** Face registers but shows UNKNOWN
-- **Solution:** Check threshold (0.7 default)
-- Ensure face is well-lit and centered
-- Lower threshold to 0.5 if too strict
-
-### App Crashes on Register
-**Error:** `NullPointerException` on register face
-- **Solution:** Ensure face is detected first
-- Wait for "🔍 Embedding: dim=192" in logs
-- Try different lighting/angle
-
----
-
-## 🎯 Future Enhancements
-
-- [ ] **Multi-face Detection** - Recognize multiple faces in one frame
-- [ ] **Delete/Edit Registered Faces** - Manage face database UI
-- [ ] **Face List Display** - Show all registered people on screen
-- [ ] **Threshold Slider** - Adjust sensitivity in real-time UI
-- [ ] **Alternative Models** - Support YOLOv5, v6, v7, v8n variants
-- [ ] **Emotion Detection** - Classify emotions alongside face recognition
-- [ ] **Profile Matching** - Store additional metadata per person
-
----
-
-## 📄 License
-MIT License - Feel free to use in your projects!
-
----
-
-## 👨‍💻 Author
-Built with ❤️ for real-time mobile vision on edge devices.
-
-### Key Achievements
-✅ **Pluggable Architecture** - Add models without refactoring  
-✅ **Multi-Person Recognition** - Register unlimited faces  
-✅ **Persistent Storage** - Faces survive app restart  
-✅ **Smooth Predictions** - No flickering, voting-based stability  
-✅ **Production Ready** - 30+ FPS, optimized memory usage  
-
----
+## 🧭 Future Work
+- Multi-face support (detect + overlay multiple circles)
+- UI to manage students/embeddings directly from the app
+- Vector quantization or pruning to keep storage lean
+- Optional cloud sync for attendance exports (if privacy policy permits)
+- Add confidence slider/liveness toggle in the settings screen
 
 ## 🔗 Resources
-- [YOLO Documentation](https://docs.ultralytics.com/)
-- [TensorFlow Lite Flutter Guide](https://www.tensorflow.org/lite/guide/flutter)
+- [Google ML Kit Face Detection](https://developers.google.com/ml-kit/vision/face-detection)
+- [AdaFace Paper](https://arxiv.org/abs/2112.15449)
+- [TensorFlow Lite Flutter](https://www.tensorflow.org/lite/guide/flutter)
 - [Flutter Camera Plugin](https://pub.dev/packages/camera)
 - [SharedPreferences Guide](https://pub.dev/packages/shared_preferences)
 
----
-
-**Happy Detecting! 🚀**
+**Happy detecting! 👁️‍🗨️**
