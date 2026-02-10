@@ -159,6 +159,9 @@ int _smoothingWindow = 5;                // Prediction smoothing window size
 ---
 
 ## 🔧 Technical Details
+### Face Overlay Accuracy Fix
+- **Problem**: The camera preview used a fixed `AspectRatio` and the overlay logic rotated the bounding box based on sensor orientation, which double-rotated the ML Kit face rectangles and caused the circle to land on the chin/neck.
+- **Solution**: Camera preview now expands via `FittedBox(fit: BoxFit.cover)` so the rendered feed matches the display area, and the overlay mapping simply scales the ML Kit bounding box from the upright JPEG (`img.decodeImage`) to display coordinates (no rotation). The front camera mirror is applied after scaling, resulting in a stable, pixel-accurate circle around the face without manual calibration.
 
 ### Algorithms Implemented
 

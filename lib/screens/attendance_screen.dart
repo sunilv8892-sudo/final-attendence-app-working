@@ -298,7 +298,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         if (!_isProcessing) {
           await _scanFace();
         }
-        await Future.delayed(const Duration(milliseconds: 800));
+        await Future.delayed(const Duration(milliseconds: 1000));
       }
     } finally {
       _isScanning = false;
@@ -557,33 +557,91 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Widget _buildFaceOverlay(Size displaySize) {
-    final scale = min(displaySize.width / _imageSize!.width, displaySize.height / _imageSize!.height);
-    final offsetX = (displaySize.width - _imageSize!.width * scale) / 2;
-    final offsetY = (displaySize.height - _imageSize!.height * scale) / 2;
+    // ── Coordinate mapping overview ──
+    // takePicture() returns a JPEG that is already rotation-corrected (EXIF
+    // applied by the camera plugin). img.decodeImage gives us the upright
+    // image (e.g. 1440×1920 portrait). ML Kit InputImage.fromFilePath also
+    // reads the EXIF, so the bounding box is in upright image coordinates.
+    // Therefore: NO sensorOrientation rotation is needed.  We just need to
+    // scale face-box coords from image-space → display-space, accounting
+    // for how CameraPreview fills the widget.
 
-    final left = _overlayFace!.x * scale + offsetX;
-    final top = _overlayFace!.y * scale + offsetY;
-    final width = _overlayFace!.width * scale;
-    final height = _overlayFace!.height * scale;
+    final double imgW = _imageSize!.width;
+    final double imgH = _imageSize!.height;
+
+    // Face bounding box in image coordinates (upright)
+    double faceX = _overlayFace!.x.toDouble();
+    double faceY = _overlayFace!.y.toDouble();
+    double faceW = _overlayFace!.width.toDouble();
+    double faceH = _overlayFace!.height.toDouble();
+
+    // The CameraPreview fills its parent via SizedBox.expand, so it uses
+    // "cover" behaviour: the preview is scaled so the shorter axis matches
+    // the widget, and the longer axis overflows (clipped by ClipRRect).
+    // The captured JPEG and preview share the same aspect ratio from the
+    // same camera, so we can treat the mapping as a simple "cover" fit
+    // from imgW×imgH → displaySize.
+
+    final double dispW = displaySize.width;
+    final double dispH = displaySize.height;
+
+    // Cover: scale to fill, crop overflow
+    final double scale = max(dispW / imgW, dispH / imgH);
+    final double scaledImgW = imgW * scale;
+    final double scaledImgH = imgH * scale;
+    // Offset to center the scaled image inside the display area
+    final double offsetX = (dispW - scaledImgW) / 2;
+    final double offsetY = (dispH - scaledImgH) / 2;
+
+    double mappedX = faceX * scale + offsetX;
+    double mappedY = faceY * scale + offsetY;
+    double mappedW = faceW * scale;
+    double mappedH = faceH * scale;
+
+    // Mirror horizontally for front camera (preview is mirrored)
+    if (_currentCamera.lensDirection == CameraLensDirection.front) {
+      mappedX = dispW - (mappedX + mappedW);
+    }
+
+    debugPrint('🔧 Overlay: img=${imgW}x${imgH} disp=${dispW}x${dispH} '
+        'scale=$scale offset=($offsetX,$offsetY) '
+        'face=($faceX,$faceY,$faceW,$faceH) '
+        'mapped=($mappedX,$mappedY,$mappedW,$mappedH)');
+
+    // Circle centred on the mapped face box
+    final double centerX = mappedX + mappedW / 2;
+    final double centerY = mappedY + mappedH / 2;
+    final double radius = max(mappedW, mappedH) / 2;
+
+    final double circleLeft = centerX - radius;
+    final double circleTop = centerY - radius;
+
+    // Clamp so the circle stays within the display area
+    final double maxLeft = max(0.0, dispW - radius * 2);
+    final double maxTop = max(0.0, dispH - radius * 2);
 
     return Positioned(
-      left: left,
-      top: top,
-      width: width,
-      height: height,
+      left: circleLeft.clamp(0.0, maxLeft),
+      top: circleTop.clamp(0.0, maxTop),
+      width: radius * 2,
+      height: radius * 2,
       child: Container(
         decoration: BoxDecoration(
+          shape: BoxShape.circle,
           border: Border.all(color: _overlayColor, width: 3),
         ),
         child: _overlayName != null
             ? Align(
                 alignment: Alignment.topCenter,
                 child: Container(
-                  color: _overlayColor,
-                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: _overlayColor,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: Text(
                     _overlayName!,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                   ),
                 ),
               )
@@ -670,7 +728,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                           final displaySize = constraints.biggest;
                           return Stack(
                             children: [
-                              CameraPreview(_controller!),
+                              // Camera preview fills the container (cover behaviour)
+                              SizedBox.expand(
+                                child: FittedBox(
+                                  fit: BoxFit.cover,
+                                  clipBehavior: Clip.hardEdge,
+                                  child: SizedBox(
+                                    width: _controller!.value.previewSize?.height ?? 1,
+                                    height: _controller!.value.previewSize?.width ?? 1,
+                                    child: CameraPreview(_controller!),
+                                  ),
+                                ),
+                              ),
                               // Face Overlay
                               if (_overlayFace != null && _imageSize != null)
                                 _buildFaceOverlay(displaySize),
