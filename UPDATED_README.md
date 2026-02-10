@@ -98,8 +98,6 @@ dependencies:
 
 ### Required assets
 - `assets/models/embedding_model.tflite` – AdaFace-Mobile embedding model (512-D vector).
-- `assets/models/blaze_face.tflite` – optional ML Kit or BlazeFace substitute if you want a custom detector.
-- `assets/models/labels.txt` – optional labels used by helper tools (not required at runtime).
 - `assets/videos/background.mp4`, `assets/lottie/success.json` – UI polish assets.
 
 ## 🧰 Troubleshooting
