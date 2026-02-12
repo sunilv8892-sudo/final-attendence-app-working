@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import '../utils/export_utils.dart';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
@@ -47,19 +51,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   bool _isScanning = false;
   final Map<int, AttendanceStatus> _attendanceStatus = {};
   DateTime? _attendanceDate;
-  double _similarityThreshold = 0.85;  // High threshold (85%) for max accuracy
-  final Map<int, DateTime> _lastDetectionTime = {}; // Prevent duplicate detections
+  double _similarityThreshold = 0.75; // Default to Low threshold
+  final Map<int, DateTime> _lastDetectionTime =
+      {}; // Prevent duplicate detections
   static const Duration _detectionCooldown = Duration(seconds: 3);
-  
-  // Multiple consecutive detection tracking
-  int? _lastDetectedStudentId;
-  int _consecutiveDetections = 0;
-  static const int _requiredConsecutiveDetections = 3; // Require 3 consecutive matches for extra safety
+
+  // Per-student consecutive detection tracking (supports multiple faces)
+  final Map<int, int> _consecutiveDetectionsMap = {};
+  static const int _requiredConsecutiveDetections =
+      3; // Require 3 consecutive matches for extra safety
 
   // Face overlay
-  DetectedFace? _overlayFace;
-  String? _overlayName;
-  Color _overlayColor = Colors.red;
+  List<DetectedFace> _overlayFaces = [];
+  List<String> _overlayNames = [];
+  List<Color> _overlayColors = [];
   Size? _imageSize;
   Timer? _overlayTimer;
 
@@ -82,7 +87,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     try {
       // Load similarity threshold from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
-      _similarityThreshold = prefs.getDouble('similarity_threshold') ?? 0.85;
+      _similarityThreshold = prefs.getDouble('similarity_threshold') ?? 0.75;
       debugPrint('📊 Loaded similarity threshold: $_similarityThreshold');
 
       _dbManager = DatabaseManager();
@@ -110,14 +115,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           student.id!,
         );
         // embeddings are already parsed from JSON to List<double> by database_manager
-        _studentEmbeddings[student.id!] =
-            embeddings.map((e) => e.vector).toList();
+        _studentEmbeddings[student.id!] = embeddings
+            .map((e) => e.vector)
+            .toList();
         debugPrint('   ${student.name}: ${embeddings.length} embeddings');
       }
 
       _attendanceDate = DateTime.now();
       // Normalize to midnight (no time component) for consistent date matching
-      _attendanceDate = DateTime(_attendanceDate!.year, _attendanceDate!.month, _attendanceDate!.day);
+      _attendanceDate = DateTime(
+        _attendanceDate!.year,
+        _attendanceDate!.month,
+        _attendanceDate!.day,
+      );
       await _initCamera();
       if (mounted) setState(() {});
     } catch (e) {
@@ -170,12 +180,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Future<void> _switchCamera() async {
     if (_availableCameras.length < 2) return;
-    
+
     final nextCamera = _availableCameras.lastWhere(
       (camera) => camera.lensDirection != _currentCamera.lensDirection,
       orElse: () => _availableCameras.first,
     );
-    
+
     _currentCamera = nextCamera;
     await _initCameraFor(nextCamera);
     debugPrint('Switched to ${nextCamera.lensDirection.toString()} camera');
@@ -195,91 +205,119 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       if (rawImage != null) {
         debugPrint('📸 Scanning face: ${rawImage.width}x${rawImage.height}');
 
-        // Detect face
+        // Detect faces
         final detections = await _detectFaceWithMlKit(bytes);
         if (detections.isEmpty) {
           debugPrint('❌ No face detected');
           return;
         }
 
-        // Take largest face
-        detections.sort(
-          (a, b) => (b.width * b.height).compareTo(a.width * a.height),
+        _imageSize = Size(
+          rawImage.width.toDouble(),
+          rawImage.height.toDouble(),
         );
-        final face = detections.first;
 
-        _imageSize = Size(rawImage.width.toDouble(), rawImage.height.toDouble());
+        // Filter valid faces (must be at least 80x80)
+        final validFaces = detections
+            .where((face) => face.width >= 80 && face.height >= 80)
+            .toList();
 
-        // Validate face size (must be at least 80x80)
-        if (face.width < 80 || face.height < 80) {
-          debugPrint('⚠️ Face too small: ${face.width.toInt()}x${face.height.toInt()}');
-          _consecutiveDetections = 0;
-          _lastDetectedStudentId = null;
-          if (mounted) setState(() {});
+        if (validFaces.isEmpty) {
+          debugPrint('⚠️ No valid faces found');
           return;
         }
 
-        // Crop and generate embedding
-        final croppedFace = _cropFace(rawImage, face);
-        final embedding = await _generateEmbedding(croppedFace);
+        // Clear previous overlays
+        _overlayFaces.clear();
+        _overlayNames.clear();
+        _overlayColors.clear();
 
-        if (embedding.isEmpty) {
-          debugPrint('❌ Failed to generate embedding');
-          _consecutiveDetections = 0;
-          _lastDetectedStudentId = null;
-          if (mounted) setState(() {});
-          return;
-        }
+        // Process each valid face
+        for (final face in validFaces) {
+          // Crop and generate embedding
+          final croppedFace = _cropFace(rawImage, face);
+          final embedding = await _generateEmbedding(croppedFace);
 
-        // Find matching student with similarity check
-        final match = _findMatchingStudent(embedding);
-        if (match != null) {
-          // Check if it's the same person as last detection
-          if (match.id == _lastDetectedStudentId) {
-            _consecutiveDetections++;
-          } else {
-            // Different person, reset counter and start new sequence
-            _consecutiveDetections = 1;
-            _lastDetectedStudentId = match.id;
+          if (embedding.isEmpty) {
+            debugPrint('❌ Failed to generate embedding for face');
+            // No embedding, show unknown
+            _overlayFaces.add(face);
+            _overlayNames.add('Unknown');
+            _overlayColors.add(Colors.red);
+            continue;
           }
 
-          // If we have enough consecutive detections, mark attendance
-          if (_consecutiveDetections >= _requiredConsecutiveDetections) {
-            final now = DateTime.now();
-            final lastTime = _lastDetectionTime[match.id] ?? DateTime(2000);
-            
-            if (now.difference(lastTime) >= _detectionCooldown) {
-              debugPrint('✅ ${match.name} marked present (confirmed)');
-              _lastDetectionTime[match.id!] = now;
-              _consecutiveDetections = 0;
-              _lastDetectedStudentId = null;
-              
-              if (mounted) {
-                setState(() {
-                  _attendanceStatus[match.id!] = AttendanceStatus.present;
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('✅ ${match.name} marked present'),
-                    backgroundColor: Colors.green,
-                    duration: const Duration(milliseconds: 800),
-                  ),
-                );
-                // Speak the attendance confirmation
-                _speakAttendanceConfirmation(match.name);
+          // Find matching student with similarity check
+          final match = _findMatchingStudent(embedding);
+          if (match != null) {
+            // Track consecutive detections per student (supports multiple faces)
+            final studentId = match.id!;
+            _consecutiveDetectionsMap[studentId] =
+                (_consecutiveDetectionsMap[studentId] ?? 0) + 1;
+
+            // If we have enough consecutive detections, check cooldown
+            if (_consecutiveDetectionsMap[studentId]! >=
+                _requiredConsecutiveDetections) {
+              final now = DateTime.now();
+              final lastTime = _lastDetectionTime[studentId] ?? DateTime(2000);
+
+              if (now.difference(lastTime) >= _detectionCooldown) {
+                debugPrint('✅ ${match.name} marked present (confirmed)');
+                _lastDetectionTime[studentId] = now;
+                _consecutiveDetectionsMap[studentId] = 0;
+
+                if (mounted) {
+                  setState(() {
+                    _attendanceStatus[studentId] = AttendanceStatus.present;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('✅ ${match.name} marked present'),
+                      backgroundColor: Colors.green,
+                      duration: const Duration(milliseconds: 800),
+                    ),
+                  );
+                  // Speak the attendance confirmation
+                  _speakAttendanceConfirmation(match.name);
+                }
+
+                // Add to overlay as marked present
+                _overlayFaces.add(face);
+                _overlayNames.add(match.name);
+                _overlayColors.add(Colors.green);
+              } else {
+                // Cooldown not met, show name with pending
+                _overlayFaces.add(face);
+                _overlayNames.add(match.name);
+                _overlayColors.add(Colors.orange);
               }
+            } else {
+              // Not enough consecutive yet, show name being detected
+              _overlayFaces.add(face);
+              _overlayNames.add(match.name);
+              _overlayColors.add(Colors.orange);
             }
           } else {
-            if (mounted) setState(() {});
+            // No match, show unknown
+            _overlayFaces.add(face);
+            _overlayNames.add('Unknown');
+            _overlayColors.add(Colors.red);
           }
-        } else {
-          _consecutiveDetections = 0;
-          _lastDetectedStudentId = null;
-          if (mounted) setState(() {});
         }
 
-        // Set overlay
-        _setOverlay(face, match?.name);
+        // Set overlay timer to clear after 3 seconds
+        _overlayTimer?.cancel();
+        _overlayTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _overlayFaces.clear();
+              _overlayNames.clear();
+              _overlayColors.clear();
+            });
+          }
+        });
+
+        if (mounted) setState(() {});
       }
     } catch (e) {
       debugPrint('Scan error: $e');
@@ -308,6 +346,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   void _stopScanning() {
     _isScanning = false;
+    _consecutiveDetectionsMap.clear();
     if (mounted) setState(() {});
   }
 
@@ -352,6 +391,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Future<void> _speakAttendanceConfirmation(String studentName) async {
     try {
+      // Check if TTS is enabled in settings
+      final prefs = await SharedPreferences.getInstance();
+      final ttsEnabled = prefs.getBool('tts_enabled') ?? true;
+      if (!ttsEnabled) return;
+
       final message = "$studentName's attendance marked successfully";
       await _flutterTts.speak(message);
       debugPrint('🔊 Speaking: $message');
@@ -465,10 +509,28 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         );
       }
       debugPrint('✅ Attendance submitted for $submitted students');
+
+      // Auto-generate CSV file (MUST complete before showing dialog)
+      String? csvError;
+      try {
+        await _generateAttendanceCSV();
+      } catch (e) {
+        csvError = e.toString();
+        debugPrint('⚠️ CSV generation failed in submit: $csvError');
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Attendance submitted for $submitted students'),
+            content: Text(
+              csvError != null
+                  ? '✅ Attendance saved ($submitted) — CSV failed: $csvError'
+                  : '✅ Attendance submitted for $submitted students + CSV saved',
+            ),
+            backgroundColor: csvError != null
+                ? AppConstants.warningColor
+                : AppConstants.successColor,
+            duration: const Duration(seconds: 2),
           ),
         );
 
@@ -482,10 +544,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               child: TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0.0, end: 1.0),
                 duration: const Duration(milliseconds: 700),
-                builder: (context, val, child) => Transform.scale(
-                  scale: val,
-                  child: child,
-                ),
+                builder: (context, val, child) =>
+                    Transform.scale(scale: val, child: child),
                 child: Container(
                   padding: const EdgeInsets.all(28),
                   decoration: BoxDecoration(
@@ -496,9 +556,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.check_circle, size: 72, color: ColorSchemes.presentColor),
+                      Icon(
+                        Icons.check_circle,
+                        size: 72,
+                        color: ColorSchemes.presentColor,
+                      ),
                       const SizedBox(height: 12),
-                      Text('Attendance Saved', style: Theme.of(context).textTheme.titleLarge),
+                      Text(
+                        'Attendance Saved',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
                     ],
                   ),
                 ),
@@ -539,114 +606,276 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return 'session_attendance_${safeTeacher}_${subjectId}_$dateStr';
   }
 
-  void _setOverlay(DetectedFace face, String? name) {
-    _overlayTimer?.cancel();
-    setState(() {
-      _overlayFace = face;
-      _overlayName = name;
-      _overlayColor = name != null ? Colors.green : Colors.red;
-    });
-    _overlayTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _overlayFace = null;
-          _overlayName = null;
+  static const MethodChannel _csvPlatform = MethodChannel(
+    'com.coad.faceattendance/save',
+  );
+
+  Future<void> _generateAttendanceCSV() async {
+    final date = _attendanceDate ?? DateTime.now();
+    final dateStr =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+    // ── Resolve export directory (shared utility) ──
+    final dir = await getExportDirectory();
+    debugPrint('📁 Export dir: ${dir.path}');
+
+    // ── 1) Subject Attendance CSV ──
+    // Build the CSV string inline (no external function dependency)
+    final allStudents = await _dbManager.getAllStudents();
+    final studentMap = <int, Student>{};
+    for (final s in allStudents) {
+      if (s.id != null) studentMap[s.id!] = s;
+    }
+
+    final presentNames = <String>[];
+    final absentNames = <String>[];
+    for (final entry in studentMap.entries) {
+      final status = _attendanceStatus[entry.key] ?? AttendanceStatus.absent;
+      if (status == AttendanceStatus.present) {
+        presentNames.add(entry.value.name);
+      } else {
+        absentNames.add(entry.value.name);
+      }
+    }
+
+    final buf = StringBuffer();
+    buf.writeln('Teacher Name,Subject');
+    buf.writeln('"${widget.teacherName}","${widget.subject.name}"');
+    buf.writeln('');
+    buf.writeln('Date: $dateStr');
+    buf.writeln('');
+    buf.writeln('Present Students,Absent Students');
+    final maxLen =
+        presentNames.length > absentNames.length ? presentNames.length : absentNames.length;
+    for (int i = 0; i < maxLen; i++) {
+      final p = i < presentNames.length ? presentNames[i] : '';
+      final a = i < absentNames.length ? absentNames[i] : '';
+      buf.writeln('"$p","$a"');
+    }
+    buf.writeln('');
+    buf.writeln('Total Present,Total Absent,Total Students');
+    buf.writeln('${presentNames.length},${absentNames.length},${studentMap.length}');
+
+    final safeSubject = widget.subject.name
+        .replaceAll(RegExp(r'[<>:"/\\|?*\s]'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+    final subjectFileName = '${safeSubject}_$dateStr.csv';
+    final subjectFile = File('${dir.path}/$subjectFileName');
+    await subjectFile.writeAsString(buf.toString(), flush: true);
+
+    // Verify file was actually written
+    if (await subjectFile.exists()) {
+      debugPrint('✅ Subject CSV written (${await subjectFile.length()} bytes): ${subjectFile.path}');
+    } else {
+      debugPrint('❌ Subject CSV NOT found after write!');
+    }
+
+    // ── 2) Cumulative Attendance CSV (master register) ──
+    // Format: names on top, dates as rows, totals at bottom
+    try {
+      final allRecords = await _dbManager.getAllAttendance();
+      if (allStudents.isNotEmpty && allRecords.isNotEmpty) {
+        // Collect all unique dates
+        final dates = <DateTime>{};
+        for (final r in allRecords) {
+          dates.add(DateTime(r.date.year, r.date.month, r.date.day));
+        }
+        final sortedDates = dates.toList()..sort();
+
+        // Build attendance lookup: studentId → date → status
+        final lookup = <int, Map<String, String>>{};
+        for (final r in allRecords) {
+          final key =
+              '${r.date.year}-${r.date.month.toString().padLeft(2, '0')}-${r.date.day.toString().padLeft(2, '0')}';
+          lookup.putIfAbsent(r.studentId, () => {});
+          lookup[r.studentId]![key] =
+              r.status == AttendanceStatus.present ? '1' : '0';
+        }
+
+        final csv = StringBuffer();
+
+        // Header row: blank + student names
+        csv.write('Date');
+        for (final s in allStudents) {
+          csv.write(',"${s.name}"');
+        }
+        csv.writeln();
+
+        // Data rows: one per date
+        final totalPresent = <int, int>{};
+        final totalAbsent = <int, int>{};
+        for (final s in allStudents) {
+          totalPresent[s.id!] = 0;
+          totalAbsent[s.id!] = 0;
+        }
+        final totalClasses = sortedDates.length;
+
+        for (final date in sortedDates) {
+          final dStr =
+              '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+          csv.write(dStr);
+          for (final s in allStudents) {
+            final val = lookup[s.id]?[dStr] ?? '0';
+            csv.write(',$val');
+            if (val == '1') {
+              totalPresent[s.id!] = (totalPresent[s.id!] ?? 0) + 1;
+            } else {
+              totalAbsent[s.id!] = (totalAbsent[s.id!] ?? 0) + 1;
+            }
+          }
+          csv.writeln();
+        }
+
+        // Summary rows
+        csv.write('Total Present');
+        for (final s in allStudents) {
+          csv.write(',${totalPresent[s.id!] ?? 0}');
+        }
+        csv.writeln();
+
+        csv.write('Total Absent');
+        for (final s in allStudents) {
+          csv.write(',${totalAbsent[s.id!] ?? 0}');
+        }
+        csv.writeln();
+
+        csv.write('Attendance %');
+        for (final s in allStudents) {
+          final p = totalPresent[s.id!] ?? 0;
+          final pct = totalClasses > 0 ? (p / totalClasses * 100).round() : 0;
+          csv.write(',$pct%');
+        }
+        csv.writeln();
+
+        csv.write('Total Classes Taken');
+        for (final s in allStudents) {
+          csv.write(',$totalClasses');
+        }
+        csv.writeln();
+
+        final cumulativeFile = File('${dir.path}/attendance_register.csv');
+        await cumulativeFile.writeAsString(csv.toString(), flush: true);
+        debugPrint('✅ Cumulative CSV updated: ${cumulativeFile.path}');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Cumulative CSV failed (non-fatal): $e');
+    }
+
+    // ── 3) MediaStore copy for Android visibility ──
+    try {
+      if (Platform.isAndroid) {
+        final bytes = await subjectFile.readAsBytes();
+        final base64data = base64Encode(bytes);
+        await _csvPlatform.invokeMethod('saveToDownloads', {
+          'filename': subjectFileName,
+          'dataBase64': base64data,
+          'subFolder': 'FaceAttendanceExports',
         });
       }
-    });
+    } catch (e) {
+      debugPrint('⚠️ MediaStore save failed (non-fatal): $e');
+    }
   }
 
   Widget _buildFaceOverlay(Size displaySize) {
-    // ── Coordinate mapping overview ──
-    // takePicture() returns a JPEG that is already rotation-corrected (EXIF
-    // applied by the camera plugin). img.decodeImage gives us the upright
-    // image (e.g. 1440×1920 portrait). ML Kit InputImage.fromFilePath also
-    // reads the EXIF, so the bounding box is in upright image coordinates.
-    // Therefore: NO sensorOrientation rotation is needed.  We just need to
-    // scale face-box coords from image-space → display-space, accounting
-    // for how CameraPreview fills the widget.
+    if (_overlayFaces.isEmpty) return const SizedBox.shrink();
 
-    final double imgW = _imageSize!.width;
-    final double imgH = _imageSize!.height;
+    return Stack(
+      children: List.generate(_overlayFaces.length, (index) {
+        final face = _overlayFaces[index];
+        final name = _overlayNames[index];
+        final color = _overlayColors[index];
 
-    // Face bounding box in image coordinates (upright)
-    double faceX = _overlayFace!.x.toDouble();
-    double faceY = _overlayFace!.y.toDouble();
-    double faceW = _overlayFace!.width.toDouble();
-    double faceH = _overlayFace!.height.toDouble();
+        // ── Coordinate mapping overview ──
+        // takePicture() returns a JPEG that is already rotation-corrected (EXIF
+        // applied by the camera plugin). img.decodeImage gives us the upright
+        // image (e.g. 1440×1920 portrait). ML Kit InputImage.fromFilePath also
+        // reads the EXIF, so the bounding box is in upright image coordinates.
+        // Therefore: NO sensorOrientation rotation is needed.  We just need to
+        // scale face-box coords from image-space → display-space, accounting
+        // for how CameraPreview fills the widget.
 
-    // The CameraPreview fills its parent via SizedBox.expand, so it uses
-    // "cover" behaviour: the preview is scaled so the shorter axis matches
-    // the widget, and the longer axis overflows (clipped by ClipRRect).
-    // The captured JPEG and preview share the same aspect ratio from the
-    // same camera, so we can treat the mapping as a simple "cover" fit
-    // from imgW×imgH → displaySize.
+        final double imgW = _imageSize!.width;
+        final double imgH = _imageSize!.height;
 
-    final double dispW = displaySize.width;
-    final double dispH = displaySize.height;
+        // Face bounding box in image coordinates (upright)
+        double faceX = face.x.toDouble();
+        double faceY = face.y.toDouble();
+        double faceW = face.width.toDouble();
+        double faceH = face.height.toDouble();
 
-    // Cover: scale to fill, crop overflow
-    final double scale = max(dispW / imgW, dispH / imgH);
-    final double scaledImgW = imgW * scale;
-    final double scaledImgH = imgH * scale;
-    // Offset to center the scaled image inside the display area
-    final double offsetX = (dispW - scaledImgW) / 2;
-    final double offsetY = (dispH - scaledImgH) / 2;
+        // The CameraPreview fills its parent via SizedBox.expand, so it uses
+        // "cover" behaviour: the preview is scaled so the shorter axis matches
+        // the widget, and the longer axis overflows (clipped by ClipRRect).
+        // The captured JPEG and preview share the same aspect ratio from the
+        // same camera, so we can treat the mapping as a simple "cover" fit
+        // from imgW×imgH → displaySize.
 
-    double mappedX = faceX * scale + offsetX;
-    double mappedY = faceY * scale + offsetY;
-    double mappedW = faceW * scale;
-    double mappedH = faceH * scale;
+        final double dispW = displaySize.width;
+        final double dispH = displaySize.height;
 
-    // Mirror horizontally for front camera (preview is mirrored)
-    if (_currentCamera.lensDirection == CameraLensDirection.front) {
-      mappedX = dispW - (mappedX + mappedW);
-    }
+        // Cover: scale to fill, crop overflow
+        final double scale = max(dispW / imgW, dispH / imgH);
+        final double scaledImgW = imgW * scale;
+        final double scaledImgH = imgH * scale;
+        // Offset to center the scaled image inside the display area
+        final double offsetX = (dispW - scaledImgW) / 2;
+        final double offsetY = (dispH - scaledImgH) / 2;
 
-    debugPrint('🔧 Overlay: img=${imgW}x${imgH} disp=${dispW}x${dispH} '
-        'scale=$scale offset=($offsetX,$offsetY) '
-        'face=($faceX,$faceY,$faceW,$faceH) '
-        'mapped=($mappedX,$mappedY,$mappedW,$mappedH)');
+        double mappedX = faceX * scale + offsetX;
+        double mappedY = faceY * scale + offsetY;
+        double mappedW = faceW * scale;
+        double mappedH = faceH * scale;
 
-    // Circle centred on the mapped face box
-    final double centerX = mappedX + mappedW / 2;
-    final double centerY = mappedY + mappedH / 2;
-    final double radius = max(mappedW, mappedH) / 2;
+        // Mirror horizontally for front camera (preview is mirrored)
+        if (_currentCamera.lensDirection == CameraLensDirection.front) {
+          mappedX = dispW - (mappedX + mappedW);
+        }
 
-    final double circleLeft = centerX - radius;
-    final double circleTop = centerY - radius;
+        // Circle centred on the mapped face box
+        final double centerX = mappedX + mappedW / 2;
+        final double centerY = mappedY + mappedH / 2;
+        final double radius = max(mappedW, mappedH) / 2;
 
-    // Clamp so the circle stays within the display area
-    final double maxLeft = max(0.0, dispW - radius * 2);
-    final double maxTop = max(0.0, dispH - radius * 2);
+        final double circleLeft = centerX - radius;
+        final double circleTop = centerY - radius;
 
-    return Positioned(
-      left: circleLeft.clamp(0.0, maxLeft),
-      top: circleTop.clamp(0.0, maxTop),
-      width: radius * 2,
-      height: radius * 2,
-      child: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: _overlayColor, width: 3),
-        ),
-        child: _overlayName != null
-            ? Align(
-                alignment: Alignment.topCenter,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: _overlayColor,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Text(
-                    _overlayName!,
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
+        // Clamp so the circle stays within the display area
+        final double maxLeft = max(0.0, dispW - radius * 2);
+        final double maxTop = max(0.0, dispH - radius * 2);
+
+        return Positioned(
+          left: circleLeft.clamp(0.0, maxLeft),
+          top: circleTop.clamp(0.0, maxTop),
+          width: radius * 2,
+          height: radius * 2,
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: color, width: 3),
+            ),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(179),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              )
-            : null,
-      ),
+                child: Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
     );
   }
 
@@ -661,7 +890,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       appBar: AppBar(
         title: const Text('Mark Attendance'),
         elevation: 0,
-        flexibleSpace: Container(decoration: BoxDecoration(gradient: AppConstants.blueGradient)),
+        flexibleSpace: Container(
+          decoration: BoxDecoration(gradient: AppConstants.blueGradient),
+        ),
         actions: [
           if (markedCount > 0)
             Padding(
@@ -704,18 +935,24 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 child: Center(
                   child: Container(
                     margin: const EdgeInsets.all(AppConstants.paddingMedium),
-                    constraints: const BoxConstraints(
-                      maxWidth: 500,
-                    ),
+                    constraints: const BoxConstraints(maxWidth: 500),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(
                         AppConstants.borderRadiusLarge,
                       ),
                       border: Border.all(
-                        color: _attendanceStatus.containsValue(AttendanceStatus.present)
+                        color:
+                            _attendanceStatus.containsValue(
+                              AttendanceStatus.present,
+                            )
                             ? Colors.green
                             : AppConstants.cardBorder,
-                        width: _attendanceStatus.containsValue(AttendanceStatus.present) ? 3 : 2,
+                        width:
+                            _attendanceStatus.containsValue(
+                              AttendanceStatus.present,
+                            )
+                            ? 3
+                            : 2,
                       ),
                       boxShadow: [AppConstants.cardShadow],
                     ),
@@ -729,19 +966,29 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                           return Stack(
                             children: [
                               // Camera preview fills the container (cover behaviour)
-                              SizedBox.expand(
-                                child: FittedBox(
-                                  fit: BoxFit.cover,
-                                  clipBehavior: Clip.hardEdge,
-                                  child: SizedBox(
-                                    width: _controller!.value.previewSize?.height ?? 1,
-                                    height: _controller!.value.previewSize?.width ?? 1,
-                                    child: CameraPreview(_controller!),
+                              RepaintBoundary(
+                                child: SizedBox.expand(
+                                  child: FittedBox(
+                                    fit: BoxFit.cover,
+                                    clipBehavior: Clip.hardEdge,
+                                    child: SizedBox(
+                                      width:
+                                          _controller!
+                                              .value
+                                              .previewSize
+                                              ?.height ??
+                                          1,
+                                      height:
+                                          _controller!.value.previewSize?.width ??
+                                          1,
+                                      child: CameraPreview(_controller!),
+                                    ),
                                   ),
                                 ),
                               ),
                               // Face Overlay
-                              if (_overlayFace != null && _imageSize != null)
+                              if (_overlayFaces.isNotEmpty &&
+                                  _imageSize != null)
                                 _buildFaceOverlay(displaySize),
                               // Processing Overlay
                               if (_isProcessing)
@@ -751,14 +998,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                   ),
                                   child: const Center(
                                     child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         CircularProgressIndicator(
-                                          valueColor: AlwaysStoppedAnimation<Color>(
-                                            AppConstants.primaryColor,
-                                          ),
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                AppConstants.primaryColor,
+                                              ),
                                         ),
-                                        SizedBox(height: AppConstants.paddingMedium),
+                                        SizedBox(
+                                          height: AppConstants.paddingMedium,
+                                        ),
                                         Text(
                                           'Scanning face...',
                                           style: TextStyle(
@@ -850,9 +1101,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 child: Center(
                   child: Container(
                     margin: const EdgeInsets.all(AppConstants.paddingMedium),
-                    constraints: const BoxConstraints(
-                      maxWidth: 500,
-                    ),
+                    constraints: const BoxConstraints(maxWidth: 500),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(
                         AppConstants.borderRadiusLarge,
@@ -933,7 +1182,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                           itemBuilder: (context, index) {
                             final student = _enrolledStudents[index];
                             final status = _attendanceStatus[student.id];
-                            final isPresent = status == AttendanceStatus.present;
+                            final isPresent =
+                                status == AttendanceStatus.present;
                             final initials = student.name
                                 .split(' ')
                                 .where((s) => s.isNotEmpty)
@@ -947,24 +1197,36 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                   if (isPresent) {
                                     _attendanceStatus.remove(student.id);
                                   } else {
-                                    _attendanceStatus[student.id!] = AttendanceStatus.present;
+                                    _attendanceStatus[student.id!] =
+                                        AttendanceStatus.present;
                                   }
                                 });
                               },
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 280),
-                                margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                margin: const EdgeInsets.symmetric(
+                                  vertical: 6,
+                                  horizontal: 8,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: isPresent ? ColorSchemes.presentColor.withOpacity(0.08) : AppConstants.cardColor,
+                                  color: isPresent
+                                      ? ColorSchemes.presentColor.withOpacity(
+                                          0.08,
+                                        )
+                                      : AppConstants.cardColor,
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: isPresent
                                       ? [
                                           BoxShadow(
-                                            color: ColorSchemes.presentColor.withOpacity(0.12),
+                                            color: ColorSchemes.presentColor
+                                                .withOpacity(0.12),
                                             blurRadius: 8,
                                             offset: const Offset(0, 2),
-                                          )
+                                          ),
                                         ]
                                       : [],
                                 ),
@@ -972,26 +1234,67 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                   children: [
                                     CircleAvatar(
                                       radius: 22,
-                                      backgroundColor: isPresent ? ColorSchemes.presentColor : AppConstants.inputFill,
-                                      child: Text(initials.toUpperCase(), style: TextStyle(color: isPresent ? Colors.white : AppConstants.textTertiary, fontWeight: FontWeight.w700)),
+                                      backgroundColor: isPresent
+                                          ? ColorSchemes.presentColor
+                                          : AppConstants.inputFill,
+                                      child: Text(
+                                        initials.toUpperCase(),
+                                        style: TextStyle(
+                                          color: isPresent
+                                              ? Colors.white
+                                              : AppConstants.textTertiary,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
                                     ),
-                                    const SizedBox(width: AppConstants.paddingMedium),
+                                    const SizedBox(
+                                      width: AppConstants.paddingMedium,
+                                    ),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          Text(student.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                          Text(
+                                            student.name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
+                                            ),
+                                          ),
                                           const SizedBox(height: 4),
-                                          Text('${student.rollNumber} • ${student.className}', style: const TextStyle(color: AppConstants.textTertiary, fontSize: 12)),
+                                          Text(
+                                            '${student.rollNumber} • ${student.className}',
+                                            style: const TextStyle(
+                                              color: AppConstants.textTertiary,
+                                              fontSize: 12,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
                                     AnimatedSwitcher(
-                                      duration: const Duration(milliseconds: 220),
-                                      transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                                      duration: const Duration(
+                                        milliseconds: 220,
+                                      ),
+                                      transitionBuilder: (child, anim) =>
+                                          ScaleTransition(
+                                            scale: anim,
+                                            child: child,
+                                          ),
                                       child: isPresent
-                                          ? Icon(Icons.check_circle, key: const ValueKey('present'), color: ColorSchemes.presentColor, size: 28)
-                                          : Icon(Icons.radio_button_unchecked, key: const ValueKey('absent'), color: AppConstants.textTertiary, size: 20),
+                                          ? Icon(
+                                              Icons.check_circle,
+                                              key: const ValueKey('present'),
+                                              color: ColorSchemes.presentColor,
+                                              size: 28,
+                                            )
+                                          : Icon(
+                                              Icons.radio_button_unchecked,
+                                              key: const ValueKey('absent'),
+                                              color: AppConstants.textTertiary,
+                                              size: 20,
+                                            ),
                                     ),
                                   ],
                                 ),
@@ -1050,4 +1353,3 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 }
 
 /// Custom Painter for Face Detection Bounding Box (Spider-Man Mask Style)
-

@@ -20,13 +20,13 @@ class _DatabaseScreenState extends State<DatabaseScreen>
 
   late Future<SystemStatistics> _systemStatsFuture;
   late Future<List<AttendanceDetails>> _studentDetailsFuture;
-  late Future<List<DailyAttendanceEntry>> _todayEntriesFuture;
   late Future<List<AttendanceDetails>> _enrolledStudentsFuture;
+  late Future<List<_DateAttendanceSummary>> _attendanceHistoryFuture;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _dbManager = DatabaseManager();
     _attendanceModule = AttendanceManagementModule(_dbManager);
     _reloadData();
@@ -35,7 +35,6 @@ class _DatabaseScreenState extends State<DatabaseScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reload data when screen comes into focus
     _reloadData();
   }
 
@@ -58,14 +57,13 @@ class _DatabaseScreenState extends State<DatabaseScreen>
           tabs: const [
             Tab(icon: Icon(Icons.bar_chart), text: 'Overview'),
             Tab(icon: Icon(Icons.people), text: 'Enrolled'),
-            Tab(icon: Icon(Icons.today), text: 'Today'),
           ],
         ),
       ),
       body: AnimatedBackground(
         child: TabBarView(
           controller: _tabController,
-          children: [_buildOverviewTab(), _buildEnrolledStudentsTab(), _buildTodayTab()],
+          children: [_buildOverviewTab(), _buildEnrolledStudentsTab()],
         ),
       ),
     );
@@ -95,10 +93,7 @@ class _DatabaseScreenState extends State<DatabaseScreen>
               const SizedBox(width: AppConstants.paddingMedium),
               const Text(
                 'System Statistics',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -120,7 +115,8 @@ class _DatabaseScreenState extends State<DatabaseScreen>
             },
           ),
           const SizedBox(height: AppConstants.paddingLarge),
-          // Students Header
+
+          // Attendance History Header
           Row(
             children: [
               Container(
@@ -130,18 +126,99 @@ class _DatabaseScreenState extends State<DatabaseScreen>
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
-                  Icons.people,
+                  Icons.history,
                   color: AppConstants.successColor,
                   size: 24,
                 ),
               ),
               const SizedBox(width: AppConstants.paddingMedium),
-              const Text(
-                'Students & Attendance',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              const Expanded(
+                child: Text(
+                  'Attendance History',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
+              ),
+              IconButton(
+                onPressed: _reloadData,
+                icon: const Icon(Icons.refresh, size: 20),
+                color: AppConstants.primaryColor,
+                tooltip: 'Refresh',
+              ),
+            ],
+          ),
+          const SizedBox(height: AppConstants.paddingSmall),
+          FutureBuilder<List<_DateAttendanceSummary>>(
+            future: _attendanceHistoryFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final history = snapshot.data ?? [];
+              if (history.isEmpty) {
+                return Container(
+                  padding: const EdgeInsets.all(AppConstants.paddingLarge),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(
+                      AppConstants.borderRadius,
+                    ),
+                    border: Border.all(color: AppConstants.cardBorder),
+                  ),
+                  child: const Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.event_busy,
+                          size: 40,
+                          color: AppConstants.textTertiary,
+                        ),
+                        SizedBox(height: 8),
+                        Text('No attendance records yet.'),
+                        SizedBox(height: 4),
+                        Text(
+                          'Take attendance to see history here',
+                          style: TextStyle(
+                            color: AppConstants.textTertiary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: history.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: AppConstants.paddingSmall),
+                itemBuilder: (context, index) =>
+                    _attendanceHistoryTile(history[index]),
+              );
+            },
+          ),
+
+          const SizedBox(height: AppConstants.paddingLarge),
+
+          // Per-Student Attendance Summary
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppConstants.accentColor.withAlpha(26),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.person_search,
+                  color: AppConstants.accentColor,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: AppConstants.paddingMedium),
+              const Text(
+                'Student Attendance',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -156,7 +233,7 @@ class _DatabaseScreenState extends State<DatabaseScreen>
               if (students.isEmpty) {
                 return Container(
                   padding: const EdgeInsets.all(AppConstants.paddingLarge),
-                  child: const Text('No students or attendance data is recorded yet.'),
+                  child: const Text('No students enrolled yet.'),
                 );
               }
               return ListView.separated(
@@ -199,7 +276,10 @@ class _DatabaseScreenState extends State<DatabaseScreen>
                   SizedBox(height: AppConstants.paddingSmall),
                   Text(
                     'Students need to complete face enrollment first',
-                    style: TextStyle(color: AppConstants.textTertiary, fontSize: 12),
+                    style: TextStyle(
+                      color: AppConstants.textTertiary,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -234,8 +314,7 @@ class _DatabaseScreenState extends State<DatabaseScreen>
               ],
             ),
             const SizedBox(height: AppConstants.paddingMedium),
-            ...enrolledStudents
-                .map((detail) => _enrolledStudentCard(detail)),
+            ...enrolledStudents.map((detail) => _enrolledStudentCard(detail)),
           ],
         );
       },
@@ -271,12 +350,18 @@ class _DatabaseScreenState extends State<DatabaseScreen>
                   const SizedBox(height: AppConstants.paddingSmall / 2),
                   Text(
                     'Enrolled: ${student.enrollmentDate.toLocal().toString().split(' ')[0]}',
-                    style: const TextStyle(fontSize: 12, color: AppConstants.textTertiary),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppConstants.textTertiary,
+                    ),
                   ),
                   const SizedBox(height: AppConstants.paddingSmall / 2),
                   Text(
                     'Attendance: $ratio (${detail.attendancePercentage.toStringAsFixed(1)}%)',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
@@ -299,73 +384,6 @@ class _DatabaseScreenState extends State<DatabaseScreen>
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildTodayTab() {
-    return FutureBuilder<List<DailyAttendanceEntry>>(
-      future: _todayEntriesFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final entries = snapshot.data ?? [];
-        final counts = _countEntriesByStatus(entries);
-        final children = <Widget>[
-          Padding(
-            padding: const EdgeInsets.only(
-              bottom: AppConstants.paddingMedium,
-              top: AppConstants.paddingMedium,
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppConstants.accentColor.withAlpha(26),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.today,
-                    color: AppConstants.accentColor,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: AppConstants.paddingMedium),
-                const Text(
-                  "Today's Attendance",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _buildStatusChips(counts),
-          const SizedBox(height: AppConstants.paddingLarge),
-        ];
-        if (entries.isEmpty) {
-          children.add(
-            Container(
-              padding: const EdgeInsets.all(AppConstants.paddingLarge),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-                border: Border.all(color: AppConstants.cardBorder),
-              ),
-              child: const Center(
-                child: Text('No attendance has been recorded today yet.'),
-              ),
-            ),
-          );
-        } else {
-          children.addAll(entries.map(_todayEntryTile));
-        }
-        return ListView(
-          padding: const EdgeInsets.all(AppConstants.paddingMedium),
-          children: children,
-        );
-      },
     );
   }
 
@@ -423,11 +441,7 @@ class _DatabaseScreenState extends State<DatabaseScreen>
                 color: stat.color.withAlpha(26),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                stat.icon,
-                color: stat.color,
-                size: 20,
-              ),
+              child: Icon(stat.icon, color: stat.color, size: 20),
             ),
             const SizedBox(height: AppConstants.paddingSmall),
             Text(
@@ -584,54 +598,153 @@ class _DatabaseScreenState extends State<DatabaseScreen>
     }
   }
 
-  Widget _todayEntryTile(DailyAttendanceEntry entry) {
+  Widget _attendanceHistoryTile(_DateAttendanceSummary summary) {
+    final dateLabel =
+        '${summary.date.day.toString().padLeft(2, '0')}/${summary.date.month.toString().padLeft(2, '0')}/${summary.date.year}';
+    final percentage = summary.totalStudents > 0
+        ? (summary.presentCount / summary.totalStudents * 100)
+        : 0.0;
+    final percentColor = percentage >= 75
+        ? AppConstants.successColor
+        : percentage >= 50
+        ? AppConstants.warningColor
+        : AppConstants.errorColor;
+
     return Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppConstants.paddingMedium,
-          vertical: AppConstants.paddingSmall,
-        ),
-        title: Text(
-          entry.name,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text(
-          'Roll: ${entry.rollNumber} · ${entry.className} · ${entry.formattedDate}',
-        ),
-        trailing: Chip(
-          label: Text(entry.status.displayName),
-          backgroundColor: _statusColor(entry.status),
+      child: InkWell(
+        onTap: () => _showDateDetails(summary),
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        child: Padding(
+          padding: const EdgeInsets.all(AppConstants.paddingMedium),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: percentColor.withAlpha(26),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.calendar_today,
+                  color: percentColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: AppConstants.paddingMedium),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      dateLabel,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Present: ${summary.presentCount} · Absent: ${summary.absentCount} · Late: ${summary.lateCount}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppConstants.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${percentage.toStringAsFixed(0)}%',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: percentColor,
+                    ),
+                  ),
+                  Text(
+                    '${summary.presentCount}/${summary.totalStudents}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppConstants.textTertiary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: AppConstants.textTertiary,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildStatusChips(Map<AttendanceStatus, int> counts) {
-    return Wrap(
-      spacing: AppConstants.paddingSmall,
-      runSpacing: AppConstants.paddingSmall,
-      children: AttendanceStatus.values.map((status) {
-        final count = counts[status] ?? 0;
-        return Chip(
-          avatar: CircleAvatar(
-            backgroundColor: Colors.white70,
-            child: Text(count.toString()),
+  void _showDateDetails(_DateAttendanceSummary summary) {
+    final dateLabel =
+        '${summary.date.day.toString().padLeft(2, '0')}/${summary.date.month.toString().padLeft(2, '0')}/${summary.date.year}';
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Attendance - $dateLabel'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _dialogRow('Total Students', summary.totalStudents.toString()),
+              _dialogRow('Present', summary.presentCount.toString()),
+              _dialogRow('Absent', summary.absentCount.toString()),
+              _dialogRow('Late', summary.lateCount.toString()),
+              const Divider(),
+              const Text(
+                'Students',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ...summary.entries.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          e.name,
+                          style: const TextStyle(fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Chip(
+                        label: Text(
+                          e.status.displayName,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        backgroundColor: _statusColor(e.status),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-          label: Text(status.displayName),
-          backgroundColor: _statusColor(status),
-        );
-      }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
     );
-  }
-
-  Map<AttendanceStatus, int> _countEntriesByStatus(
-    List<DailyAttendanceEntry> entries,
-  ) {
-    final counts = <AttendanceStatus, int>{};
-    for (final entry in entries) {
-      counts[entry.status] = (counts[entry.status] ?? 0) + 1;
-    }
-    return counts;
   }
 
   void _reloadData() {
@@ -640,24 +753,23 @@ class _DatabaseScreenState extends State<DatabaseScreen>
       _systemStatsFuture = _attendanceModule.getSystemStatistics();
       _studentDetailsFuture = _loadStudentDetails();
       _enrolledStudentsFuture = _loadEnrolledStudents();
-      _todayEntriesFuture = _loadTodayEntries();
+      _attendanceHistoryFuture = _loadAttendanceHistory();
     });
   }
 
   Future<List<AttendanceDetails>> _loadStudentDetails() async {
     try {
       final students = await _dbManager.getAllStudents();
-      print('📊 Overview: ${students.length} students found');
-      
+
       final records = <AttendanceDetails>[];
       for (final student in students) {
         try {
-          final detail = await _attendanceModule.getAttendanceDetails(student.id!);
+          final detail = await _attendanceModule.getAttendanceDetails(
+            student.id!,
+          );
           if (detail != null) {
             records.add(detail);
-            print('   ✅ ${student.name}: ${detail.presentCount}/${detail.totalClasses}');
           } else {
-            print('   ⚠️  ${student.name}: getAttendanceDetails returned null');
             records.add(
               AttendanceDetails(
                 student: student,
@@ -671,7 +783,6 @@ class _DatabaseScreenState extends State<DatabaseScreen>
             );
           }
         } catch (e) {
-          print('   ❌ ${student.name}: $e');
           records.add(
             AttendanceDetails(
               student: student,
@@ -686,10 +797,8 @@ class _DatabaseScreenState extends State<DatabaseScreen>
         }
       }
       records.sort((a, b) => a.student.name.compareTo(b.student.name));
-      print('✅ Loaded ${records.length} students for overview');
       return records;
     } catch (e) {
-      print('❌ Error in _loadStudentDetails: $e');
       return [];
     }
   }
@@ -697,17 +806,16 @@ class _DatabaseScreenState extends State<DatabaseScreen>
   Future<List<AttendanceDetails>> _loadEnrolledStudents() async {
     try {
       final enrolledStudents = await _dbManager.getEnrolledStudents();
-      print('👥 Enrolled: ${enrolledStudents.length} students found');
-      
+
       final records = <AttendanceDetails>[];
       for (final student in enrolledStudents) {
         try {
-          final detail = await _attendanceModule.getAttendanceDetails(student.id!);
+          final detail = await _attendanceModule.getAttendanceDetails(
+            student.id!,
+          );
           if (detail != null) {
             records.add(detail);
-            print('   ✅ ${student.name}: enrolled');
           } else {
-            print('   ⚠️  ${student.name}: getAttendanceDetails returned null');
             records.add(
               AttendanceDetails(
                 student: student,
@@ -721,7 +829,6 @@ class _DatabaseScreenState extends State<DatabaseScreen>
             );
           }
         } catch (e) {
-          print('   ❌ ${student.name}: $e');
           records.add(
             AttendanceDetails(
               student: student,
@@ -736,35 +843,75 @@ class _DatabaseScreenState extends State<DatabaseScreen>
         }
       }
       records.sort((a, b) => a.student.name.compareTo(b.student.name));
-      print('✅ Loaded ${records.length} enrolled students');
       return records;
     } catch (e) {
-      print('❌ Error in _loadEnrolledStudents: $e');
       return [];
     }
   }
 
-  Future<List<DailyAttendanceEntry>> _loadTodayEntries() async {
-    final now = DateTime.now();
-    final records = await _dbManager.getAttendanceForDate(
-      DateTime(now.year, now.month, now.day),
-    );
-    final entries = <DailyAttendanceEntry>[];
-    for (final record in records) {
-      final student = await _dbManager.getStudentById(record.studentId);
-      if (student == null) continue;
-      entries.add(
-        DailyAttendanceEntry(
-          name: student.name,
-          rollNumber: student.rollNumber,
-          className: student.className,
-          status: record.status,
-          date: record.date,
-          time: record.time ?? '',
-        ),
-      );
+  Future<List<_DateAttendanceSummary>> _loadAttendanceHistory() async {
+    try {
+      final allRecords = await _dbManager.getAllAttendance();
+      if (allRecords.isEmpty) return [];
+
+      // Group records by date, deduplicate per student per date (latest wins)
+      final byDate = <String, Map<int, AttendanceRecord>>{};
+      for (final record in allRecords) {
+        final dateKey =
+            '${record.date.year}-${record.date.month.toString().padLeft(2, '0')}-${record.date.day.toString().padLeft(2, '0')}';
+        byDate.putIfAbsent(dateKey, () => {});
+        final existing = byDate[dateKey]![record.studentId];
+        if (existing == null ||
+            record.recordedAt.isAfter(existing.recordedAt)) {
+          byDate[dateKey]![record.studentId] = record;
+        }
+      }
+
+      final summaries = <_DateAttendanceSummary>[];
+      for (final entry in byDate.entries) {
+        final records = entry.value.values.toList();
+        final date = records.first.date;
+        final present = records
+            .where((r) => r.status == AttendanceStatus.present)
+            .length;
+        final absent = records
+            .where((r) => r.status == AttendanceStatus.absent)
+            .length;
+        final late = records
+            .where((r) => r.status == AttendanceStatus.late)
+            .length;
+
+        // Get student names for the detail view
+        final entries = <_DateStudentEntry>[];
+        for (final record in records) {
+          final student = await _dbManager.getStudentById(record.studentId);
+          entries.add(
+            _DateStudentEntry(
+              name: student?.name ?? 'Unknown',
+              status: record.status,
+            ),
+          );
+        }
+        entries.sort((a, b) => a.name.compareTo(b.name));
+
+        summaries.add(
+          _DateAttendanceSummary(
+            date: DateTime(date.year, date.month, date.day),
+            totalStudents: records.length,
+            presentCount: present,
+            absentCount: absent,
+            lateCount: late,
+            entries: entries,
+          ),
+        );
+      }
+
+      // Sort by date descending (most recent first)
+      summaries.sort((a, b) => b.date.compareTo(a.date));
+      return summaries;
+    } catch (e) {
+      return [];
     }
-    return entries;
   }
 
   void _showStudentDetails(AttendanceDetails details) {
@@ -871,30 +1018,29 @@ class _StatData {
   });
 }
 
-class DailyAttendanceEntry {
-  final String name;
-  final String rollNumber;
-  final String className;
-  final AttendanceStatus status;
+class _DateAttendanceSummary {
   final DateTime date;
-  final String time;
+  final int totalStudents;
+  final int presentCount;
+  final int absentCount;
+  final int lateCount;
+  final List<_DateStudentEntry> entries;
 
-  DailyAttendanceEntry({
-    required this.name,
-    required this.rollNumber,
-    required this.className,
-    required this.status,
+  _DateAttendanceSummary({
     required this.date,
-    required this.time,
+    required this.totalStudents,
+    required this.presentCount,
+    required this.absentCount,
+    required this.lateCount,
+    required this.entries,
   });
+}
 
-  String get formattedDate {
-    final day = date.day.toString().padLeft(2, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final year = date.year;
-    final timeLabel = time.isNotEmpty ? ' • $time' : '';
-    return '$day/$month/$year$timeLabel';
-  }
+class _DateStudentEntry {
+  final String name;
+  final AttendanceStatus status;
+
+  _DateStudentEntry({required this.name, required this.status});
 }
 
 enum _StudentAction { deleteStudent, clearEmbeddings }

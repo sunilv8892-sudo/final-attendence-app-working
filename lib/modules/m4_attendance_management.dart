@@ -92,10 +92,10 @@ class AttendanceManagementModule {
   }
 
   /// Export attendance data as CSV format
+  /// Format: Student names on top row, dates as rows, totals at bottom
   Future<String> exportAsCSV() async {
     final allStudents = await dbManager.getAllStudents();
     final allRecords = await dbManager.getAllAttendance();
-    final buffer = StringBuffer();
 
     if (allStudents.isEmpty || allRecords.isEmpty) {
       return 'No data to export';
@@ -108,69 +108,100 @@ class AttendanceManagementModule {
     }
     final sortedDates = dates.toList()..sort();
 
-    // Create header row with dates in DD/MM/YYYY format
-    final header = StringBuffer('Student Name');
-    for (final date in sortedDates) {
-      final formattedDate =
-          '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-      header.write(',$formattedDate');
-    }
-    header.write(',Total_Attended,Total_Absent');
-    buffer.writeln(header);
-
-    // Create a map for quick lookup of attendance status
-    final attendanceMap = <int, Map<DateTime, String>>{};
-    for (final student in allStudents) {
-      attendanceMap[student.id!] = {};
-      for (final date in sortedDates) {
-        attendanceMap[student.id!]![date] = '0'; // Default to absent
-      }
-    }
-
-    // Fill in the attendance data
+    // Build attendance lookup: studentId → dateStr → '1'/'0'
+    final lookup = <int, Map<String, String>>{};
     for (final record in allRecords) {
-      final dateKey = DateTime(record.date.year, record.date.month, record.date.day);
-      if (attendanceMap[record.studentId] != null) {
-        attendanceMap[record.studentId]![dateKey] = 
-            record.status == AttendanceStatus.present ? '1' : '0';
-      }
+      final dateKey =
+          '${record.date.year}-${record.date.month.toString().padLeft(2, '0')}-${record.date.day.toString().padLeft(2, '0')}';
+      lookup.putIfAbsent(record.studentId, () => {});
+      lookup[record.studentId]![dateKey] =
+          record.status == AttendanceStatus.present ? '1' : '0';
     }
 
-    // Write student rows
+    final buffer = StringBuffer();
+
+    // Header row: Date + student names
+    buffer.write('Date');
     for (final student in allStudents) {
-      int attended = 0;
-      int absent = 0;
-      
-      final row = StringBuffer(student.name);
-      for (final date in sortedDates) {
-        final status = attendanceMap[student.id]?[date] ?? '0';
-        row.write(',$status');
-        if (status == '1') {
-          attended++;
+      buffer.write(',"${student.name}"');
+    }
+    buffer.writeln();
+
+    // Per-student accumulators
+    final totalPresent = <int, int>{};
+    final totalAbsent = <int, int>{};
+    for (final s in allStudents) {
+      totalPresent[s.id!] = 0;
+      totalAbsent[s.id!] = 0;
+    }
+    final totalClasses = sortedDates.length;
+
+    // Data rows: one per date
+    for (final date in sortedDates) {
+      final dateStr =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      buffer.write(dateStr);
+      for (final student in allStudents) {
+        final val = lookup[student.id]?[dateStr] ?? '0';
+        buffer.write(',$val');
+        if (val == '1') {
+          totalPresent[student.id!] = (totalPresent[student.id!] ?? 0) + 1;
         } else {
-          absent++;
+          totalAbsent[student.id!] = (totalAbsent[student.id!] ?? 0) + 1;
         }
       }
-      row.write(',$attended,$absent');
-      buffer.writeln(row);
+      buffer.writeln();
     }
+
+    // Summary rows
+    buffer.write('Total Present');
+    for (final s in allStudents) {
+      buffer.write(',${totalPresent[s.id!] ?? 0}');
+    }
+    buffer.writeln();
+
+    buffer.write('Total Absent');
+    for (final s in allStudents) {
+      buffer.write(',${totalAbsent[s.id!] ?? 0}');
+    }
+    buffer.writeln();
+
+    buffer.write('Attendance %');
+    for (final s in allStudents) {
+      final p = totalPresent[s.id!] ?? 0;
+      final pct = totalClasses > 0 ? (p / totalClasses * 100).round() : 0;
+      buffer.write(',$pct%');
+    }
+    buffer.writeln();
+
+    buffer.write('Total Classes Taken');
+    for (final s in allStudents) {
+      buffer.write(',$totalClasses');
+    }
+    buffer.writeln();
 
     return buffer.toString();
   }
 
-  /// Export embeddings only as CSV
+  /// Export embeddings only as CSV (includes full student details)
   Future<String> exportEmbeddingsCSV() async {
     final buffer = StringBuffer();
-    buffer.writeln('id,student_id,student_name,capture_date,dimension,vector');
+    buffer.writeln('id,student_id,student_name,roll_number,class,gender,age,phone_number,enrollment_date,capture_date,dimension,vector');
     final embeddings = await dbManager.getAllEmbeddings();
     for (final emb in embeddings) {
-      // Get student name for this embedding
+      // Get full student details for this embedding
       final student = await dbManager.getStudentById(emb.studentId);
       final studentName = student?.name ?? 'Unknown';
+      final rollNumber = student?.rollNumber ?? '';
+      final className = student?.className ?? '';
+      final gender = student?.gender ?? '';
+      final age = student?.age ?? 0;
+      final phoneNumber = student?.phoneNumber ?? '';
+      final enrollmentDate = student?.enrollmentDate.toIso8601String().split('T')[0] ?? '';
       
       final vecStr = emb.vector.map((v) => v.toStringAsFixed(6)).join(';');
       buffer.writeln(
-        '${emb.id ?? ''},${emb.studentId},$studentName,${emb.captureDate.toIso8601String()},${emb.dimension},"$vecStr"',
+        '${emb.id ?? ''},${emb.studentId},"$studentName","$rollNumber","$className","$gender",$age,"$phoneNumber",$enrollmentDate,${emb.captureDate.toIso8601String()},${emb.dimension},"$vecStr"',
       );
     }
     return buffer.toString();

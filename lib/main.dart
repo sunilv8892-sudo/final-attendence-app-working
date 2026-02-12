@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'database/database_manager.dart';
 import 'screens/home_screen.dart';
@@ -31,18 +30,7 @@ class FaceRecognitionApp extends StatelessWidget {
       title: AppConstants.appName,
       theme: AppTheme.lightTheme,
       builder: (context, child) {
-        final widget = child ?? const SizedBox.shrink();
-        return Container(
-          decoration: const BoxDecoration(
-            gradient: AppConstants.backgroundGradient,
-          ),
-          child: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-              child: widget,
-            ),
-          ),
-        );
+        return child ?? const SizedBox.shrink();
       },
       initialRoute: AppConstants.routeHome,
       routes: {

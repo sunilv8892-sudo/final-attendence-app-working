@@ -19,10 +19,10 @@ class FaceDetectionModule {
       FaceDetectorOptions(
         enableContours: false,
         enableClassification: false,
-        enableLandmarks: true,
+        enableLandmarks: false,
         enableTracking: false,
         minFaceSize: 0.1,
-        performanceMode: FaceDetectorMode.accurate,
+        performanceMode: FaceDetectorMode.fast,
       ),
     );
   }

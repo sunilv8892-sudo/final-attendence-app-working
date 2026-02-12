@@ -32,10 +32,11 @@ class DatabaseManager {
     final List<String> students = prefs.getStringList('students') ?? [];
 
     // Determine new id
-    final ids = students.map((s) => jsonDecode(s) as Map<String, dynamic>)
-      .map((m) => _parseInt(m['id']))
-      .whereType<int>()
-      .toList();
+    final ids = students
+        .map((s) => jsonDecode(s) as Map<String, dynamic>)
+        .map((m) => _parseInt(m['id']))
+        .whereType<int>()
+        .toList();
     final newId = ids.isEmpty ? 1 : (ids.reduce((a, b) => a > b ? a : b) + 1);
 
     final record = student.toMap();
@@ -81,10 +82,9 @@ class DatabaseManager {
   Future<int> updateStudent(int id, model.Student student) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = prefs.getStringList('students') ?? [];
-    final updated = jsonList.map((s) => jsonDecode(s) as Map<String, dynamic>)
-        .map((m) => m['id'] == id
-            ? _createStudentMap(student, id)
-            : m)
+    final updated = jsonList
+        .map((s) => jsonDecode(s) as Map<String, dynamic>)
+        .map((m) => m['id'] == id ? _createStudentMap(student, id) : m)
         .map(jsonEncode)
         .toList();
     await prefs.setStringList('students', updated);
@@ -125,31 +125,43 @@ class DatabaseManager {
     return newId;
   }
 
-  Future<List<model.FaceEmbedding>> getEmbeddingsForStudent(int studentId) async {
+  Future<List<model.FaceEmbedding>> getEmbeddingsForStudent(
+    int studentId,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = prefs.getStringList('embeddings') ?? [];
-    return jsonList.map((s) => jsonDecode(s) as Map<String, dynamic>)
-      .where((m) => _parseInt(m['studentId']) == studentId)
-      .map((m) => model.FaceEmbedding(
+    return jsonList
+        .map((s) => jsonDecode(s) as Map<String, dynamic>)
+        .where((m) => _parseInt(m['studentId']) == studentId)
+        .map(
+          (m) => model.FaceEmbedding(
             id: _parseInt(m['id']),
             studentId: _parseInt(m['studentId'])!,
-            vector: List<double>.from((m['vector'] as List).map((e) => (e as num).toDouble())),
+            vector: List<double>.from(
+              (m['vector'] as List).map((e) => (e as num).toDouble()),
+            ),
             captureDate: _parseDate(m['captureDate'] as String?),
-          ))
-      .toList();
+          ),
+        )
+        .toList();
   }
 
   Future<List<model.FaceEmbedding>> getAllEmbeddings() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = prefs.getStringList('embeddings') ?? [];
-    return jsonList.map((s) => jsonDecode(s) as Map<String, dynamic>)
-      .map((m) => model.FaceEmbedding(
+    return jsonList
+        .map((s) => jsonDecode(s) as Map<String, dynamic>)
+        .map(
+          (m) => model.FaceEmbedding(
             id: _parseInt(m['id']),
             studentId: _parseInt(m['studentId'])!,
-            vector: List<double>.from((m['vector'] as List).map((e) => (e as num).toDouble())),
+            vector: List<double>.from(
+              (m['vector'] as List).map((e) => (e as num).toDouble()),
+            ),
             captureDate: _parseDate(m['captureDate'] as String?),
-          ))
-      .toList();
+          ),
+        )
+        .toList();
   }
 
   double _cosineSimilarity(List<double> a, List<double> b) {
@@ -166,9 +178,14 @@ class DatabaseManager {
     return dot / (sqrt(normA) * sqrt(normB));
   }
 
-  Future<List<model.FaceEmbedding>> findSimilarEmbeddings(List<double> queryVector, double threshold) async {
+  Future<List<model.FaceEmbedding>> findSimilarEmbeddings(
+    List<double> queryVector,
+    double threshold,
+  ) async {
     final all = await getAllEmbeddings();
-    return all.where((e) => _cosineSimilarity(e.vector, queryVector) >= threshold).toList();
+    return all
+        .where((e) => _cosineSimilarity(e.vector, queryVector) >= threshold)
+        .toList();
   }
 
   // ==================== ATTENDANCE OPERATIONS ====================
@@ -195,12 +212,16 @@ class DatabaseManager {
     return newId;
   }
 
-  Future<List<model.AttendanceRecord>> getAttendanceForStudent(int studentId) async {
+  Future<List<model.AttendanceRecord>> getAttendanceForStudent(
+    int studentId,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final records = prefs.getStringList('attendance') ?? [];
-    return records.map((s) => jsonDecode(s) as Map<String, dynamic>)
-      .where((m) => _parseInt(m['studentId']) == studentId)
-      .map((m) => model.AttendanceRecord(
+    return records
+        .map((s) => jsonDecode(s) as Map<String, dynamic>)
+        .where((m) => _parseInt(m['studentId']) == studentId)
+        .map(
+          (m) => model.AttendanceRecord(
             id: _parseInt(m['id']),
             studentId: _parseInt(m['studentId'])!,
             date: _parseDate(m['date'] as String?),
@@ -210,21 +231,28 @@ class DatabaseManager {
               orElse: () => model.AttendanceStatus.absent,
             ),
             recordedAt: _parseDate(m['recordedAt'] as String?),
-          ))
-      .toList();
+          ),
+        )
+        .toList();
   }
 
-  Future<List<model.AttendanceRecord>> getAttendanceForDate(DateTime date) async {
+  Future<List<model.AttendanceRecord>> getAttendanceForDate(
+    DateTime date,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final records = prefs.getStringList('attendance') ?? [];
-    final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-    return records.map((s) => jsonDecode(s) as Map<String, dynamic>)
-      .where((m) {
-        final d = _parseDate(m['date'] as String?);
-        final recordDateStr = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-        return recordDateStr == dateStr;
-      })
-      .map((m) => model.AttendanceRecord(
+    final dateStr =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final allForDate = records
+        .map((s) => jsonDecode(s) as Map<String, dynamic>)
+        .where((m) {
+          final d = _parseDate(m['date'] as String?);
+          final recordDateStr =
+              '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+          return recordDateStr == dateStr;
+        })
+        .map(
+          (m) => model.AttendanceRecord(
             id: _parseInt(m['id']),
             studentId: _parseInt(m['studentId'])!,
             date: _parseDate(m['date'] as String?),
@@ -234,11 +262,25 @@ class DatabaseManager {
               orElse: () => model.AttendanceStatus.absent,
             ),
             recordedAt: _parseDate(m['recordedAt'] as String?),
-          ))
-      .toList();
+          ),
+        )
+        .toList();
+
+    // Deduplicate: keep latest record per student
+    final byStudent = <int, model.AttendanceRecord>{};
+    for (final r in allForDate) {
+      final existing = byStudent[r.studentId];
+      if (existing == null || r.recordedAt.isAfter(existing.recordedAt)) {
+        byStudent[r.studentId] = r;
+      }
+    }
+    return byStudent.values.toList();
   }
 
-  Future<model.AttendanceRecord?> getAttendanceForStudentOnDate(int studentId, DateTime date) async {
+  Future<model.AttendanceRecord?> getAttendanceForStudentOnDate(
+    int studentId,
+    DateTime date,
+  ) async {
     final records = await getAttendanceForDate(date);
     try {
       return records.firstWhere((r) => r.studentId == studentId);
@@ -258,10 +300,28 @@ class DatabaseManager {
 
   Future<Map<String, dynamic>> getAttendanceStats(int studentId) async {
     final records = await getAttendanceForStudent(studentId);
-    final total = records.length;
-    final present = records.where((r) => r.status == model.AttendanceStatus.present).length;
-    final absent = records.where((r) => r.status == model.AttendanceStatus.absent).length;
-    final late = records.where((r) => r.status == model.AttendanceStatus.late).length;
+
+    // Deduplicate: keep only the latest record per date
+    final byDate = <String, model.AttendanceRecord>{};
+    for (final r in records) {
+      final key = '${r.date.year}-${r.date.month}-${r.date.day}';
+      final existing = byDate[key];
+      if (existing == null || r.recordedAt.isAfter(existing.recordedAt)) {
+        byDate[key] = r;
+      }
+    }
+    final unique = byDate.values.toList();
+
+    final total = unique.length;
+    final present = unique
+        .where((r) => r.status == model.AttendanceStatus.present)
+        .length;
+    final absent = unique
+        .where((r) => r.status == model.AttendanceStatus.absent)
+        .length;
+    final late = unique
+        .where((r) => r.status == model.AttendanceStatus.late)
+        .length;
     return {
       'total': total,
       'present': present,
@@ -274,8 +334,10 @@ class DatabaseManager {
   Future<List<model.AttendanceRecord>> getAllAttendance() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = prefs.getStringList('attendance') ?? [];
-    return jsonList.map((s) => jsonDecode(s) as Map<String, dynamic>)
-      .map((m) => model.AttendanceRecord(
+    return jsonList
+        .map((s) => jsonDecode(s) as Map<String, dynamic>)
+        .map(
+          (m) => model.AttendanceRecord(
             id: _parseInt(m['id']),
             studentId: _parseInt(m['studentId'])!,
             date: _parseDate(m['date'] as String?),
@@ -285,8 +347,9 @@ class DatabaseManager {
               orElse: () => model.AttendanceStatus.absent,
             ),
             recordedAt: _parseDate(m['recordedAt'] as String?),
-          ))
-      .toList();
+          ),
+        )
+        .toList();
   }
 
   Future<int> deleteEmbeddingsForStudent(int studentId) async {
@@ -318,7 +381,13 @@ class DatabaseManager {
   Future<void> insertSubject(model.Subject subject) async {
     final prefs = await SharedPreferences.getInstance();
     final subjects = prefs.getStringList('subjects') ?? [];
-    subjects.add(jsonEncode({'id': subject.id, 'name': subject.name, 'createdAt': subject.createdAt.toIso8601String()}));
+    subjects.add(
+      jsonEncode({
+        'id': subject.id,
+        'name': subject.name,
+        'createdAt': subject.createdAt.toIso8601String(),
+      }),
+    );
     await prefs.setStringList('subjects', subjects);
   }
 
@@ -343,7 +412,9 @@ class DatabaseManager {
     final subjects = await getAllSubjects();
 
     try {
-      return subjects.firstWhere((s) => s.name.toLowerCase() == subjectName.toLowerCase());
+      return subjects.firstWhere(
+        (s) => s.name.toLowerCase() == subjectName.toLowerCase(),
+      );
     } catch (e) {
       final newSubject = model.Subject(
         id: DateTime.now().millisecondsSinceEpoch,
@@ -357,14 +428,16 @@ class DatabaseManager {
   Future<void> insertTeacherSession(model.TeacherSession session) async {
     final prefs = await SharedPreferences.getInstance();
     final sessions = prefs.getStringList('teacherSessions') ?? [];
-    sessions.add(jsonEncode({
-      'id': session.id,
-      'teacherName': session.teacherName,
-      'subjectId': session.subjectId,
-      'subjectName': session.subjectName,
-      'date': session.date.toIso8601String(),
-      'createdAt': session.createdAt.toIso8601String(),
-    }));
+    sessions.add(
+      jsonEncode({
+        'id': session.id,
+        'teacherName': session.teacherName,
+        'subjectId': session.subjectId,
+        'subjectName': session.subjectName,
+        'date': session.date.toIso8601String(),
+        'createdAt': session.createdAt.toIso8601String(),
+      }),
+    );
     await prefs.setStringList('teacherSessions', sessions);
   }
 
@@ -383,24 +456,34 @@ class DatabaseManager {
             teacherName: data['teacherName'] as String? ?? '',
             subjectId: subjectId,
             subjectName: data['subjectName'] as String? ?? '',
-            date: DateTime.tryParse(data['date'] as String? ?? '') ?? DateTime.now(),
-            createdAt: DateTime.tryParse(data['createdAt'] as String? ?? '') ?? DateTime.now(),
+            date:
+                DateTime.tryParse(data['date'] as String? ?? '') ??
+                DateTime.now(),
+            createdAt:
+                DateTime.tryParse(data['createdAt'] as String? ?? '') ??
+                DateTime.now(),
           );
         })
         .whereType<model.TeacherSession>()
         .toList();
   }
 
-  Future<List<model.TeacherSession>> getTeacherSessionsByDate(DateTime date) async {
+  Future<List<model.TeacherSession>> getTeacherSessionsByDate(
+    DateTime date,
+  ) async {
     final sessions = await getAllTeacherSessions();
-    final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final dateStr =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     return sessions.where((s) {
-      final sessionDateStr = '${s.date.year}-${s.date.month.toString().padLeft(2, '0')}-${s.date.day.toString().padLeft(2, '0')}';
+      final sessionDateStr =
+          '${s.date.year}-${s.date.month.toString().padLeft(2, '0')}-${s.date.day.toString().padLeft(2, '0')}';
       return sessionDateStr == dateStr;
     }).toList();
   }
 
-  Future<List<model.TeacherSession>> getTeacherSessionsBySubject(int subjectId) async {
+  Future<List<model.TeacherSession>> getTeacherSessionsBySubject(
+    int subjectId,
+  ) async {
     final sessions = await getAllTeacherSessions();
     return sessions.where((s) => s.subjectId == subjectId).toList();
   }
