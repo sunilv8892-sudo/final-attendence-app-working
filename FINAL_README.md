@@ -23,7 +23,7 @@
 ## 1. Overview
 
 **App Name:** Face Recognition Attendance  
-**Package Name:** `yolo_app`  
+**Package Name:** `vision_id`  
 **Version:** 1.0.0  
 **Platform:** Android (primary), iOS (secondary)  
 **Framework:** Flutter (Dart)  
@@ -730,7 +730,7 @@ flutter build apk --release
 1. Ensure storage permission is granted
 2. Check that attendance was submitted (not just scanned)
 3. Tap refresh button on export screen
-4. Files are in: `<ExternalStorage>/Android/data/com.example.yolo_app/files/downloads/FaceAttendanceExports/`
+4. Files are in: `<ExternalStorage>/Android/data/com.example.vision_id/files/downloads/FaceAttendanceExports/`
 
 ### Low Performance on Budget Phones
 1. The app is optimized for 2GB+ RAM devices
