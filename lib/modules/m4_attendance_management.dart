@@ -405,25 +405,21 @@ Future<String> exportSubjectAttendanceAsCSV(
     }
   }
 
-  buffer.writeln('Present Students,Absent Students');
+  // Single-summary cell (quoted) to keep the summary in one visible column
+  buffer.writeln('"Attendees = ${presentStudents.length}, Absentees = ${absentStudents.length}, Total = ${studentMap.length}"');
+  buffer.writeln('');
 
   final maxLines = presentStudents.length > absentStudents.length
       ? presentStudents.length
       : absentStudents.length;
 
   for (int i = 0; i < maxLines; i++) {
-    final presentName = i < presentStudents.length
-        ? presentStudents[i].name
-        : '';
-    final absentName = i < absentStudents.length
-        ? absentStudents[i].name
-        : '';
-    buffer.writeln('"$presentName","$absentName"');
+    final presentName = i < presentStudents.length ? presentStudents[i].name : '';
+    final absentName = i < absentStudents.length ? absentStudents[i].name : '';
+    buffer.writeln('"$presentName","$absentName",');
   }
 
   buffer.writeln('');
-  buffer.writeln('Total Present,Total Absent,Total Students');
-  buffer.writeln('${presentStudents.length},${absentStudents.length},${studentMap.length}');
 
   return buffer.toString();
 }

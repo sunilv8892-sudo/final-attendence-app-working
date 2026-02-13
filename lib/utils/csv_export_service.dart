@@ -52,28 +52,20 @@ class CsvExportService {
       csvContent.writeln('Date: $dateStr');
       csvContent.writeln('');
       
-      // Present and Absent side by side
-      csvContent.writeln('Present Students,Absent Students');
-      
+      // Single-summary cell (quoted) so spreadsheet shows the text in one column
+      csvContent.writeln('"Attendees = ${attendedStudents.length}, Absentees = ${absentStudents.length}, Total = ${enrolledStudents.length}"');
+      csvContent.writeln('');
+
+      // Names listed side-by-side
       final maxLines = attendedStudents.length > absentStudents.length
           ? attendedStudents.length
           : absentStudents.length;
-      
+
       for (int i = 0; i < maxLines; i++) {
-        final presentName = i < attendedStudents.length
-            ? attendedStudents[i].name
-            : '';
-        final absentName = i < absentStudents.length
-            ? absentStudents[i].name
-            : '';
-        
-        csvContent.writeln('"$presentName","$absentName"');
+        final presentName = i < attendedStudents.length ? attendedStudents[i].name : '';
+        final absentName = i < absentStudents.length ? absentStudents[i].name : '';
+        csvContent.writeln('"$presentName","$absentName",');
       }
-      
-      // Totals
-      csvContent.writeln('');
-      csvContent.writeln('Total Present,Total Absent,Total Students');
-      csvContent.writeln('${attendedStudents.length},${absentStudents.length},${enrolledStudents.length}');
 
       // Get export directory (same as export_screen)
       Directory? exportDir;

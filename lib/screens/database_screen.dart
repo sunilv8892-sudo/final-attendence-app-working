@@ -366,20 +366,10 @@ class _DatabaseScreenState extends State<DatabaseScreen>
                 ],
               ),
             ),
-            PopupMenuButton<_StudentAction>(
-              icon: const Icon(Icons.more_vert),
-              tooltip: 'Student actions',
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: _StudentAction.deleteStudent,
-                  child: Text('Delete student'),
-                ),
-                const PopupMenuItem(
-                  value: _StudentAction.clearEmbeddings,
-                  child: Text('Clear embeddings'),
-                ),
-              ],
-              onSelected: (action) => _handleStudentAction(detail, action),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              tooltip: 'Delete student',
+              onPressed: () => _handleDeleteStudent(detail),
             ),
           ],
         ),
@@ -494,7 +484,7 @@ class _DatabaseScreenState extends State<DatabaseScreen>
                     ),
                     const SizedBox(height: AppConstants.paddingSmall / 2),
                     Text(
-                      'Present: ${details.presentCount} · Absent: ${details.absentCount} · Late: ${details.lateCount}',
+                      'Attendees: ${details.presentCount} · Absentees: ${details.absentCount}',
                     ),
                   ],
                 ),
@@ -516,20 +506,10 @@ class _DatabaseScreenState extends State<DatabaseScreen>
                 ],
               ),
               const SizedBox(width: AppConstants.paddingSmall),
-              PopupMenuButton<_StudentAction>(
-                icon: const Icon(Icons.more_vert, color: Colors.white70),
-                tooltip: 'Student actions',
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: _StudentAction.deleteStudent,
-                    child: Text('Delete student'),
-                  ),
-                  const PopupMenuItem(
-                    value: _StudentAction.clearEmbeddings,
-                    child: Text('Clear embeddings'),
-                  ),
-                ],
-                onSelected: (action) => _handleStudentAction(details, action),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                tooltip: 'Delete student',
+                onPressed: () => _handleDeleteStudent(details),
               ),
             ],
           ),
@@ -538,25 +518,17 @@ class _DatabaseScreenState extends State<DatabaseScreen>
     );
   }
 
-  Future<void> _handleStudentAction(
-    AttendanceDetails details,
-    _StudentAction action,
-  ) async {
+  Future<void> _handleDeleteStudent(AttendanceDetails details) async {
     final student = details.student;
     if (student.id == null) return;
-
-    final title = action == _StudentAction.deleteStudent
-        ? 'Delete student'
-        : 'Clear embeddings';
-    final description = action == _StudentAction.deleteStudent
-        ? 'Delete ${student.name} and all their attendance data?'
-        : 'Remove all saved embeddings for ${student.name}? They will need to re-enroll their face.';
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(description),
+        title: const Text('Delete Student'),
+        content: Text(
+          'Delete ${student.name}, their embeddings, and all attendance data?\nThis cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -564,7 +536,8 @@ class _DatabaseScreenState extends State<DatabaseScreen>
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm'),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -573,15 +546,13 @@ class _DatabaseScreenState extends State<DatabaseScreen>
     if (confirmed != true) return;
 
     try {
-      if (action == _StudentAction.deleteStudent) {
-        await _dbManager.deleteStudent(student.id!);
-      } else {
-        await _dbManager.deleteEmbeddingsForStudent(student.id!);
-      }
+      // Delete embeddings first, then the student
+      await _dbManager.deleteEmbeddingsForStudent(student.id!);
+      await _dbManager.deleteStudent(student.id!);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$title completed for ${student.name}'),
+          content: Text('${student.name} deleted'),
           backgroundColor: AppConstants.successColor,
         ),
       );
@@ -589,7 +560,7 @@ class _DatabaseScreenState extends State<DatabaseScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to perform action: $e'),
+          content: Text('Failed to delete: $e'),
           backgroundColor: AppConstants.errorColor,
         ),
       );
@@ -644,7 +615,7 @@ class _DatabaseScreenState extends State<DatabaseScreen>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Present: ${summary.presentCount} · Absent: ${summary.absentCount} · Late: ${summary.lateCount}',
+                      'Attendees = ${summary.presentCount}, Absentees = ${summary.absentCount}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppConstants.textSecondary,
@@ -699,9 +670,8 @@ class _DatabaseScreenState extends State<DatabaseScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               _dialogRow('Total Students', summary.totalStudents.toString()),
-              _dialogRow('Present', summary.presentCount.toString()),
-              _dialogRow('Absent', summary.absentCount.toString()),
-              _dialogRow('Late', summary.lateCount.toString()),
+              _dialogRow('Attendees', summary.presentCount.toString()),
+              _dialogRow('Absentees', summary.absentCount.toString()),
               const Divider(),
               const Text(
                 'Students',
@@ -1043,4 +1013,4 @@ class _DateStudentEntry {
   _DateStudentEntry({required this.name, required this.status});
 }
 
-enum _StudentAction { deleteStudent, clearEmbeddings }
+

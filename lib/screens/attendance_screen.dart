@@ -54,12 +54,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   double _similarityThreshold = 0.75; // Default to Low threshold
   final Map<int, DateTime> _lastDetectionTime =
       {}; // Prevent duplicate detections
-  static const Duration _detectionCooldown = Duration(seconds: 3);
+  static const Duration _detectionCooldown = Duration(seconds: 2);
 
   // Per-student consecutive detection tracking (supports multiple faces)
   final Map<int, int> _consecutiveDetectionsMap = {};
   static const int _requiredConsecutiveDetections =
-      3; // Require 3 consecutive matches for extra safety
+      2; // Require 2 consecutive matches
 
   // Face overlay
   List<DetectedFace> _overlayFaces = [];
@@ -217,9 +217,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           rawImage.height.toDouble(),
         );
 
-        // Filter valid faces (must be at least 80x80)
+        // Filter valid faces (must be at least 60x60)
         final validFaces = detections
-            .where((face) => face.width >= 80 && face.height >= 80)
+            .where((face) => face.width >= 60 && face.height >= 60)
             .toList();
 
         if (validFaces.isEmpty) {
@@ -305,9 +305,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           }
         }
 
-        // Set overlay timer to clear after 3 seconds
+        // Set overlay timer to clear after 2 seconds
         _overlayTimer?.cancel();
-        _overlayTimer = Timer(const Duration(seconds: 3), () {
+        _overlayTimer = Timer(const Duration(seconds: 2), () {
           if (mounted) {
             setState(() {
               _overlayFaces.clear();
@@ -336,7 +336,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         if (!_isProcessing) {
           await _scanFace();
         }
-        await Future.delayed(const Duration(milliseconds: 1000));
+        await Future.delayed(const Duration(milliseconds: 500));
       }
     } finally {
       _isScanning = false;
@@ -435,19 +435,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       normA += a[i] * a[i];
       normB += b[i] * b[i];
     }
-    final denominator = _sqrt(normA) * _sqrt(normB);
+    final denominator = sqrt(normA) * sqrt(normB);
     return denominator == 0 ? 0.0 : dotProduct / denominator;
-  }
-
-  double _sqrt(double x) {
-    if (x == 0) return 0;
-    double z = x;
-    double result = 0;
-    while ((z - result).abs() > 1e-7) {
-      result = z;
-      z = 0.5 * (z + x / z);
-    }
-    return z;
   }
 
   Future<void> _submitAttendance() async {
@@ -642,19 +631,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     buf.writeln('Teacher Name,Subject');
     buf.writeln('"${widget.teacherName}","${widget.subject.name}"');
     buf.writeln('');
-    buf.writeln('Date: $dateStr');
+    // Date in its own row (date in second column)
+    buf.writeln('Date:,${dateStr}');
     buf.writeln('');
-    buf.writeln('Present Students,Absent Students');
-    final maxLen =
-        presentNames.length > absentNames.length ? presentNames.length : absentNames.length;
+    // Single-summary cell (quoted) so it's visible in one column as text
+    buf.writeln('"Attendees = ${presentNames.length}, Absentees = ${absentNames.length}, Total = ${studentMap.length}"');
+    buf.writeln('');
+
+    // Now list names side-by-side under Attendees and Absentees columns
+    final maxLen = presentNames.length > absentNames.length ? presentNames.length : absentNames.length;
     for (int i = 0; i < maxLen; i++) {
       final p = i < presentNames.length ? presentNames[i] : '';
       final a = i < absentNames.length ? absentNames[i] : '';
-      buf.writeln('"$p","$a"');
+      buf.writeln('"$p","$a",');
     }
-    buf.writeln('');
-    buf.writeln('Total Present,Total Absent,Total Students');
-    buf.writeln('${presentNames.length},${absentNames.length},${studentMap.length}');
 
     final safeSubject = widget.subject.name
         .replaceAll(RegExp(r'[<>:"/\\|?*\s]'), '_')
@@ -727,13 +717,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         }
 
         // Summary rows
-        csv.write('Total Present');
+        csv.write('Attendees');
         for (final s in allStudents) {
           csv.write(',${totalPresent[s.id!] ?? 0}');
         }
         csv.writeln();
 
-        csv.write('Total Absent');
+        csv.write('Absentees');
         for (final s in allStudents) {
           csv.write(',${totalAbsent[s.id!] ?? 0}');
         }
