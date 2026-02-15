@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:file_picker/file_picker.dart';
 import '../utils/constants.dart';
 import '../utils/export_utils.dart';
 import '../widgets/animated_background.dart';
@@ -178,6 +179,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Backup failed: $e'),
+            backgroundColor: AppConstants.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _restoreFromFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        dialogTitle: 'Select backup JSON file',
+      );
+      if (result == null) return;
+      final path = result.files.single.path;
+      if (path == null) return;
+
+      final file = File(path);
+      final jsonStr = await file.readAsString();
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+      // Validate it looks like our backup format
+      if (!data.containsKey('students') && !data.containsKey('embeddings')) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid backup file — missing expected data keys.'),
+              backgroundColor: AppConstants.errorColor,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show confirmation with stats before overwriting
+      final studentCount = (data['students'] as List?)?.length ?? 0;
+      final embeddingCount = (data['embeddings'] as List?)?.length ?? 0;
+      final attendanceCount = (data['attendance'] as List?)?.length ?? 0;
+      final subjectCount = (data['subjects'] as List?)?.length ?? 0;
+      final sessionCount = (data['teacherSessions'] as List?)?.length ?? 0;
+      final exportDate = data['exportDate'] ?? 'Unknown';
+
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Restore From Backup?'),
+          content: Text(
+            'This will REPLACE all current data with the backup.\n\n'
+            'Backup info:\n'
+            'Export date: $exportDate\n'
+            'Students: $studentCount\n'
+            'Embeddings: $embeddingCount\n'
+            'Attendance: $attendanceCount\n'
+            'Subjects: $subjectCount\n'
+            'Sessions: $sessionCount\n\n'
+            'Current data will be lost. Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.restore, size: 18),
+              label: const Text('Restore'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppConstants.primaryColor,
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('students', List<String>.from(data['students'] ?? []));
+      await prefs.setStringList('embeddings', List<String>.from(data['embeddings'] ?? []));
+      await prefs.setStringList('attendance', List<String>.from(data['attendance'] ?? []));
+      await prefs.setStringList('subjects', List<String>.from(data['subjects'] ?? []));
+      await prefs.setStringList('teacherSessions', List<String>.from(data['teacherSessions'] ?? []));
+
+      await _loadSettings();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Restored $studentCount students, $attendanceCount attendance records from backup.'),
+            backgroundColor: AppConstants.successColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Restore failed: $e'),
             backgroundColor: AppConstants.errorColor,
           ),
         );
@@ -699,6 +799,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: 'Export all data as JSON (shareable)',
               color: AppConstants.primaryColor,
               onTap: _backupDatabase,
+            ),
+            const Divider(height: 1, color: AppConstants.dividerColor),
+
+            // Restore from backup file
+            _actionTile(
+              icon: Icons.restore,
+              title: 'Restore From Backup',
+              subtitle: 'Upload a JSON backup to restore app state',
+              color: AppConstants.primaryColor,
+              onTap: _restoreFromFile,
             ),
             const Divider(height: 1, color: AppConstants.dividerColor),
 
