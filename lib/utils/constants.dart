@@ -104,6 +104,7 @@ class AppConstants {
   static const String routeDatabase = '/database';
   static const String routeExport = '/export';
   static const String routeSettings = '/settings';
+  static const String routeExpressionDetection = '/expression_detection';
 
   // Database
   static const String dbName = 'attendance.db';

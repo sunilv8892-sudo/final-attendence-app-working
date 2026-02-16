@@ -241,11 +241,11 @@ class _HomeScreenState extends State<HomeScreen> {
         // Management Tools
         _buildCircularCard(
           context,
-          icon: Icons.storage,
-          title: 'Database',
-          subtitle: 'Manage students',
+          icon: Icons.mood,
+          title: 'Expression\nDetection',
+          subtitle: 'Detect emotions',
           color: const Color(0xFFFFA726),
-          route: AppConstants.routeDatabase,
+          route: AppConstants.routeExpressionDetection,
         ),
 
         _buildCircularCard(
@@ -267,7 +267,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
 
         // Feature Highlight
-        _buildFeatureHighlightCard(),
+        _buildCircularCard(
+          context,
+          icon: Icons.storage,
+          title: 'Database',
+          subtitle: 'Manage students',
+          color: const Color(0xFF78909C),
+          route: AppConstants.routeDatabase,
+        ),
       ],
     );
   }

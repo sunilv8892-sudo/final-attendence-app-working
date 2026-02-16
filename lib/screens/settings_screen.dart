@@ -17,13 +17,14 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  int _similarityIndex = 0; // 0=Low, 1=Medium, 2=High
-  final List<String> _modes = ['Low', 'Medium', 'High'];
-  final List<double> _thresholds = [0.75, 0.80, 0.90];
+  int _similarityIndex = 0; // 0=Low, 1=Medium, 2=High, 3=Ultra
+  final List<String> _modes = ['Low', 'Medium', 'High', 'Ultra'];
+  final List<double> _thresholds = [0.75, 0.80, 0.85, 0.90];
   final List<String> _descriptions = [
     'More lenient — fewer missed faces, may accept similar-looking people',
     'Balanced — good accuracy for most lighting and environments',
-    'Strict — very high confidence required, may miss some detections',
+    'Strict — high confidence required, fewer false positives',
+    'Ultra strict — very high confidence, may miss some detections',
   ];
 
   // Real stats
@@ -51,8 +52,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _similarityIndex = 0;
       } else if (savedThreshold == 0.80) {
         _similarityIndex = 1;
-      } else if (savedThreshold == 0.90) {
+      } else if (savedThreshold == 0.85) {
         _similarityIndex = 2;
+      } else if (savedThreshold == 0.90) {
+        _similarityIndex = 3;
       }
     }
 
@@ -278,6 +281,229 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Restore failed: $e'),
+            backgroundColor: AppConstants.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _mergeFromFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        dialogTitle: 'Select backup JSON file to merge',
+      );
+      if (result == null) return;
+      final path = result.files.single.path;
+      if (path == null) return;
+
+      final file = File(path);
+      final jsonStr = await file.readAsString();
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+      // Validate backup format
+      if (!data.containsKey('students') && !data.containsKey('embeddings')) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid backup file — missing expected data keys.'),
+              backgroundColor: AppConstants.errorColor,
+            ),
+          );
+        }
+        return;
+      }
+
+      final importStudents = List<String>.from(data['students'] ?? []);
+      final importEmbeddings = List<String>.from(data['embeddings'] ?? []);
+      final importAttendance = List<String>.from(data['attendance'] ?? []);
+      final importSubjects = List<String>.from(data['subjects'] ?? []);
+      final importSessions = List<String>.from(data['teacherSessions'] ?? []);
+      final exportDate = data['exportDate'] ?? 'Unknown';
+
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Merge Backup Data?'),
+          content: Text(
+            'This will MERGE the backup data with your current data.\n'
+            'Existing data will be preserved.\n\n'
+            'Backup info:\n'
+            'Export date: $exportDate\n'
+            'Students: ${importStudents.length}\n'
+            'Embeddings: ${importEmbeddings.length}\n'
+            'Attendance: ${importAttendance.length}\n'
+            'Subjects: ${importSubjects.length}\n'
+            'Sessions: ${importSessions.length}\n\n'
+            'New items will be added, duplicates will be skipped.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.merge_type, size: 18),
+              label: const Text('Merge'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppConstants.primaryColor,
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+
+      final prefs = await SharedPreferences.getInstance();
+
+      // Get current data
+      final currentStudents = prefs.getStringList('students') ?? [];
+      final currentEmbeddings = prefs.getStringList('embeddings') ?? [];
+      final currentAttendance = prefs.getStringList('attendance') ?? [];
+      final currentSubjects = prefs.getStringList('subjects') ?? [];
+      final currentSessions = prefs.getStringList('teacherSessions') ?? [];
+
+      // ── Merge Students ──
+      final existingStudentNames = <String>{};
+      int maxStudentId = 0;
+      for (final s in currentStudents) {
+        final map = jsonDecode(s) as Map<String, dynamic>;
+        final name = (map['name'] as String? ?? '').toLowerCase().trim();
+        final id = map['id'] as int? ?? 0;
+        existingStudentNames.add(name);
+        if (id > maxStudentId) maxStudentId = id;
+      }
+
+      // Map old imported IDs → new IDs (for embedding/attendance remapping)
+      final idMapping = <int, int>{};
+      int addedStudents = 0;
+
+      for (final s in importStudents) {
+        final map = jsonDecode(s) as Map<String, dynamic>;
+        final name = (map['name'] as String? ?? '').toLowerCase().trim();
+        final oldId = map['id'] as int? ?? 0;
+
+        if (existingStudentNames.contains(name)) {
+          // Student already exists — find their current ID for remapping
+          for (final cs in currentStudents) {
+            final cMap = jsonDecode(cs) as Map<String, dynamic>;
+            if ((cMap['name'] as String? ?? '').toLowerCase().trim() == name) {
+              idMapping[oldId] = cMap['id'] as int? ?? 0;
+              break;
+            }
+          }
+          continue;
+        }
+
+        // New student — assign fresh ID
+        maxStudentId++;
+        idMapping[oldId] = maxStudentId;
+        map['id'] = maxStudentId;
+        currentStudents.add(jsonEncode(map));
+        existingStudentNames.add(name);
+        addedStudents++;
+      }
+
+      // ── Merge Embeddings ──
+      int addedEmbeddings = 0;
+      final existingEmbeddingStudentIds = <int>{};
+      for (final e in currentEmbeddings) {
+        final map = jsonDecode(e) as Map<String, dynamic>;
+        existingEmbeddingStudentIds.add(map['student_id'] as int? ?? 0);
+      }
+
+      for (final e in importEmbeddings) {
+        final map = jsonDecode(e) as Map<String, dynamic>;
+        final oldStudentId = map['student_id'] as int? ?? 0;
+        final newStudentId = idMapping[oldStudentId] ?? oldStudentId;
+
+        if (existingEmbeddingStudentIds.contains(newStudentId)) continue;
+
+        map['student_id'] = newStudentId;
+        currentEmbeddings.add(jsonEncode(map));
+        existingEmbeddingStudentIds.add(newStudentId);
+        addedEmbeddings++;
+      }
+
+      // ── Merge Attendance ──
+      int addedAttendance = 0;
+      final existingAttendanceKeys = <String>{};
+      for (final a in currentAttendance) {
+        final map = jsonDecode(a) as Map<String, dynamic>;
+        existingAttendanceKeys.add('${map['student_id']}_${map['date']}');
+      }
+
+      for (final a in importAttendance) {
+        final map = jsonDecode(a) as Map<String, dynamic>;
+        final oldStudentId = map['student_id'] as int? ?? 0;
+        final newStudentId = idMapping[oldStudentId] ?? oldStudentId;
+        map['student_id'] = newStudentId;
+
+        final key = '${newStudentId}_${map['date']}';
+        if (existingAttendanceKeys.contains(key)) continue;
+
+        currentAttendance.add(jsonEncode(map));
+        existingAttendanceKeys.add(key);
+        addedAttendance++;
+      }
+
+      // ── Merge Subjects ──
+      int addedSubjects = 0;
+      final existingSubjectNames = <String>{};
+      for (final s in currentSubjects) {
+        final map = jsonDecode(s) as Map<String, dynamic>;
+        existingSubjectNames.add((map['name'] as String? ?? '').toLowerCase().trim());
+      }
+
+      for (final s in importSubjects) {
+        final map = jsonDecode(s) as Map<String, dynamic>;
+        final name = (map['name'] as String? ?? '').toLowerCase().trim();
+        if (existingSubjectNames.contains(name)) continue;
+        currentSubjects.add(s);
+        existingSubjectNames.add(name);
+        addedSubjects++;
+      }
+
+      // ── Merge Sessions ──
+      int addedSessions = 0;
+      final existingSessionKeys = currentSessions.toSet();
+      for (final s in importSessions) {
+        if (existingSessionKeys.contains(s)) continue;
+        currentSessions.add(s);
+        existingSessionKeys.add(s);
+        addedSessions++;
+      }
+
+      // Save all merged data
+      await prefs.setStringList('students', currentStudents);
+      await prefs.setStringList('embeddings', currentEmbeddings);
+      await prefs.setStringList('attendance', currentAttendance);
+      await prefs.setStringList('subjects', currentSubjects);
+      await prefs.setStringList('teacherSessions', currentSessions);
+
+      await _loadSettings();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Merged: +$addedStudents students, +$addedEmbeddings embeddings, '
+              '+$addedAttendance attendance, +$addedSubjects subjects, +$addedSessions sessions',
+            ),
+            backgroundColor: AppConstants.successColor,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Merge failed: $e'),
             backgroundColor: AppConstants.errorColor,
           ),
         );
@@ -631,8 +857,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       indicatorColor = AppConstants.successColor;
     } else if (_similarityIndex == 1) {
       indicatorColor = AppConstants.warningColor;
-    } else {
+    } else if (_similarityIndex == 2) {
       indicatorColor = AppConstants.errorColor;
+    } else {
+      indicatorColor = const Color(0xFF9C27B0); // Purple for Ultra
     }
 
     return Card(
@@ -653,22 +881,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             // Segmented buttons
             Row(
-              children: List.generate(3, (index) {
+              children: List.generate(4, (index) {
                 final isSelected = _similarityIndex == index;
                 final Color color;
                 if (index == 0) {
                   color = AppConstants.successColor;
                 } else if (index == 1) {
                   color = AppConstants.warningColor;
-                } else {
+                } else if (index == 2) {
                   color = AppConstants.errorColor;
+                } else {
+                  color = const Color(0xFF9C27B0); // Purple for Ultra
                 }
 
                 return Expanded(
                   child: Padding(
                     padding: EdgeInsets.only(
-                      left: index == 0 ? 0 : 4,
-                      right: index == 2 ? 0 : 4,
+                      left: index == 0 ? 0 : 3,
+                      right: index == 3 ? 0 : 3,
                     ),
                     child: GestureDetector(
                       onTap: () {
@@ -809,6 +1039,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: 'Upload a JSON backup to restore app state',
               color: AppConstants.primaryColor,
               onTap: _restoreFromFile,
+            ),
+            const Divider(height: 1, color: AppConstants.dividerColor),
+
+            // Merge from backup file
+            _actionTile(
+              icon: Icons.merge_type,
+              title: 'Merge From Backup',
+              subtitle: 'Add new data from JSON without erasing existing',
+              color: AppConstants.primaryColor,
+              onTap: _mergeFromFile,
             ),
             const Divider(height: 1, color: AppConstants.dividerColor),
 

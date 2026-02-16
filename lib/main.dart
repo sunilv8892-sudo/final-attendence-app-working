@@ -6,6 +6,7 @@ import 'screens/attendance_prep_screen.dart';
 import 'screens/database_screen.dart';
 import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/expression_detection_screen.dart';
 import 'utils/constants.dart';
 
 late DatabaseManager _dbManager;
@@ -40,6 +41,7 @@ class FaceRecognitionApp extends StatelessWidget {
         AppConstants.routeDatabase: (context) => const DatabaseScreen(),
         AppConstants.routeExport: (context) => const ExportScreen(),
         AppConstants.routeSettings: (context) => const SettingsScreen(),
+        AppConstants.routeExpressionDetection: (context) => const ExpressionDetectionScreen(),
       },
     );
   }

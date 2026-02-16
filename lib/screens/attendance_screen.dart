@@ -65,8 +65,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   List<DetectedFace> _overlayFaces = [];
   List<String> _overlayNames = [];
   List<Color> _overlayColors = [];
+  List<String> _overlayExpressions = [];
   Size? _imageSize;
   Timer? _overlayTimer;
+
+  // Expression tracking per student
+  final Map<int, String> _studentExpressions = {};
 
   @override
   void initState() {
@@ -231,6 +235,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _overlayFaces.clear();
         _overlayNames.clear();
         _overlayColors.clear();
+        _overlayExpressions.clear();
 
         // Process each valid face
         for (final face in validFaces) {
@@ -244,6 +249,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             _overlayFaces.add(face);
             _overlayNames.add('Unknown');
             _overlayColors.add(Colors.red);
+            _overlayExpressions.add('');
             continue;
           }
 
@@ -269,6 +275,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 if (mounted) {
                   setState(() {
                     _attendanceStatus[studentId] = AttendanceStatus.present;
+                    _studentExpressions[studentId] = face.expression;
                   });
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -285,23 +292,27 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 _overlayFaces.add(face);
                 _overlayNames.add(match.name);
                 _overlayColors.add(Colors.green);
+                _overlayExpressions.add(face.expression);
               } else {
                 // Cooldown not met, show name with pending
                 _overlayFaces.add(face);
                 _overlayNames.add(match.name);
                 _overlayColors.add(Colors.orange);
+                _overlayExpressions.add(face.expression);
               }
             } else {
               // Not enough consecutive yet, show name being detected
               _overlayFaces.add(face);
               _overlayNames.add(match.name);
               _overlayColors.add(Colors.orange);
+              _overlayExpressions.add(face.expression);
             }
           } else {
             // No match, show unknown
             _overlayFaces.add(face);
             _overlayNames.add('Unknown');
             _overlayColors.add(Colors.red);
+            _overlayExpressions.add(face.expression);
           }
         }
 
@@ -313,6 +324,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               _overlayFaces.clear();
               _overlayNames.clear();
               _overlayColors.clear();
+              _overlayExpressions.clear();
             });
           }
         });
@@ -361,6 +373,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               width: face.boundingBox.width.toDouble(),
               height: face.boundingBox.height.toDouble(),
               confidence: 1.0,
+              expression: face.expression,
             ),
           )
           .toList();
@@ -617,11 +630,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
 
     final presentNames = <String>[];
+    final presentExpressions = <String>[];
     final absentNames = <String>[];
     for (final entry in studentMap.entries) {
       final status = _attendanceStatus[entry.key] ?? AttendanceStatus.absent;
       if (status == AttendanceStatus.present) {
         presentNames.add(entry.value.name);
+        presentExpressions.add(_studentExpressions[entry.key] ?? '');
       } else {
         absentNames.add(entry.value.name);
       }
@@ -638,12 +653,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     buf.writeln('"Attendees = ${presentNames.length}, Absentees = ${absentNames.length}, Total = ${studentMap.length}"');
     buf.writeln('');
 
-    // Now list names side-by-side under Attendees and Absentees columns
+    // Header row: Absentees, Attendees, Expression (absentees first)
+    buf.writeln('Absentees,Attendees,Expression');
+    // Now list names side-by-side under Absentees and Attendees columns,
+    // with the Expression column aligned to the Attendees row.
     final maxLen = presentNames.length > absentNames.length ? presentNames.length : absentNames.length;
     for (int i = 0; i < maxLen; i++) {
-      final p = i < presentNames.length ? presentNames[i] : '';
       final a = i < absentNames.length ? absentNames[i] : '';
-      buf.writeln('"$p","$a",');
+      final p = i < presentNames.length ? presentNames[i] : '';
+      final e = i < presentExpressions.length ? presentExpressions[i] : '';
+      buf.writeln('"$a","$p","$e"');
     }
 
     final safeSubject = widget.subject.name
@@ -775,6 +794,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         final face = _overlayFaces[index];
         final name = _overlayNames[index];
         final color = _overlayColors[index];
+        final expr = index < _overlayExpressions.length ? _overlayExpressions[index] : '';
 
         // ── Coordinate mapping overview ──
         // takePicture() returns a JPEG that is already rotation-corrected (EXIF
@@ -839,30 +859,57 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           top: circleTop.clamp(0.0, maxTop),
           width: radius * 2,
           height: radius * 2,
-          child: Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: color, width: 3),
-            ),
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Circle border
+              Container(
                 decoration: BoxDecoration(
-                  color: color.withAlpha(179),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: color, width: 3),
                 ),
               ),
-            ),
+              // Name + expression label above the circle
+              Positioned(
+                top: -30,
+                left: -20,
+                right: -20,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(179),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (expr.isNotEmpty)
+                          Text(
+                            expr,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       }),
@@ -950,15 +997,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       borderRadius: BorderRadius.circular(
                         AppConstants.borderRadiusLarge,
                       ),
-                      child: LayoutBuilder(
+                      child: ExcludeSemantics(
+                        child: LayoutBuilder(
                         builder: (context, constraints) {
                           final displaySize = constraints.biggest;
                           return Stack(
+                            fit: StackFit.expand,
                             children: [
                               // Camera preview fills the container (cover behaviour)
                               RepaintBoundary(
-                                child: SizedBox.expand(
-                                  child: FittedBox(
+                                child: FittedBox(
                                     fit: BoxFit.cover,
                                     clipBehavior: Clip.hardEdge,
                                     child: SizedBox(
@@ -973,7 +1021,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                           1,
                                       child: CameraPreview(_controller!),
                                     ),
-                                  ),
                                 ),
                               ),
                               // Face Overlay
@@ -1081,6 +1128,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                           );
                         },
                       ),
+                      ),
                     ),
                   ),
                 ),
@@ -1174,6 +1222,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                             final status = _attendanceStatus[student.id];
                             final isPresent =
                                 status == AttendanceStatus.present;
+                            final studentExpr = _studentExpressions[student.id] ?? '';
                             final initials = student.name
                                 .split(' ')
                                 .where((s) => s.isNotEmpty)
@@ -1245,12 +1294,37 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            student.name,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 14,
-                                            ),
+                                          Row(
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  student.name,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                              ),
+                                              if (isPresent && studentExpr.isNotEmpty) ...[
+                                                const SizedBox(width: 6),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: AppConstants.primaryColor.withAlpha(20),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    border: Border.all(color: AppConstants.primaryColor.withAlpha(60)),
+                                                  ),
+                                                  child: Text(
+                                                    studentExpr,
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: AppConstants.primaryColor,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
                                           ),
                                           const SizedBox(height: 4),
                                           Text(

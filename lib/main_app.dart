@@ -7,6 +7,7 @@ import 'screens/attendance_screen_stub.dart';
 import 'screens/database_screen.dart';
 import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/expression_detection_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +49,7 @@ class _FaceRecognitionAppState extends State<FaceRecognitionApp> {
         AppConstants.routeDatabase: (context) => const DatabaseScreen(),
         AppConstants.routeExport: (context) => const ExportScreen(),
         AppConstants.routeSettings: (context) => const SettingsScreen(),
+        AppConstants.routeExpressionDetection: (context) => const ExpressionDetectionScreen(),
       },
     );
   }

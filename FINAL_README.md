@@ -395,6 +395,20 @@ android/app/src/main/kotlin/.../MainActivity.kt
 
 ---
 
+  ### 7.8 Expression Detection Screen (`expression_detection_screen.dart`)
+  - **Route:** `/expression_detection` (registered as `AppConstants.routeExpressionDetection`)
+  - **Purpose:** Lightweight camera screen that detects faces using Google ML Kit and displays a simple expression label for each detected face. This screen does NOT perform attendance marking or enrollment — it is for quick expression/affect inspection and testing.
+  - **Key Behavior:**
+    - Initializes the ML Kit Face Detector with classification enabled and processes frames from the camera preview.
+    - For each detected face, computes an expression label (e.g., "Happy", "Neutral", "Sad", "Winking", "Eyes Closed") using the heuristic in `lib/modules/m1_face_detection.dart` and stores the label on `DetectedFace.expression`.
+    - Draws bounding boxes and the expression label as an overlay on the camera preview.
+    - Starts/stops continuous scanning via an on-screen control; overlays update in real time.
+  - **Implementation Notes:**
+    - Uses the existing ML Kit wrapper at `lib/modules/m1_face_detection.dart` with classification enabled (smile/eye probabilities) and a lightweight heuristic mapping to textual labels.
+    - No stateful attendance logic; UI intentionally simplified to avoid layout constraint issues seen in other screens.
+    - Useful for QA, model verification, and demonstrations.
+
+
 ## 8. Database Layer
 
 ### Storage Engine: SharedPreferences
@@ -556,13 +570,15 @@ Teacher Name,Subject
 
 Date: 2026-02-12
 
-Present Students,Absent Students
-"Alice","Charlie"
-"Bob",""
+Absentees,Attendees,Expression
+"Charlie","Alice","Happy"
+"","Bob","Neutral"
 
-Total Present,Total Absent,Total Students
-2,1,3
+Total Absent,Total Present,Total Students
+1,2,3
 ```
+
+Note: Subject CSV column order has been updated to `Absentees,Attendees,Expression` (rows map absentee → attendee → expression label).
 
 ### Manual Attendance Export
 **Filename:** `attendance_csv_TIMESTAMP.csv`  

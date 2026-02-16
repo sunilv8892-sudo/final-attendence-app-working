@@ -18,7 +18,7 @@ class FaceDetectionModule {
     _faceDetector = GoogleMlKit.vision.faceDetector(
       FaceDetectorOptions(
         enableContours: false,
-        enableClassification: false,
+        enableClassification: true,
         enableLandmarks: false,
         enableTracking: false,
         minFaceSize: 0.1,
@@ -112,21 +112,53 @@ class DetectedFace {
   final Rect boundingBox;
   final double? headEulerAngleY; // Left-right rotation
   final double? headEulerAngleZ; // Up-down rotation
+  final double? smilingProbability;
+  final double? leftEyeOpenProbability;
+  final double? rightEyeOpenProbability;
   final List<Offset> landmarks;
 
   DetectedFace({
     required this.boundingBox,
     this.headEulerAngleY,
     this.headEulerAngleZ,
+    this.smilingProbability,
+    this.leftEyeOpenProbability,
+    this.rightEyeOpenProbability,
     required this.landmarks,
   });
+
+  /// Determine facial expression from classification probabilities
+  String get expression {
+    final smile = smilingProbability ?? 0.0;
+    final leftEye = leftEyeOpenProbability ?? 0.5;
+    final rightEye = rightEyeOpenProbability ?? 0.5;
+    final eyesOpen = (leftEye + rightEye) / 2;
+
+    // Both eyes closed
+    if (eyesOpen < 0.3) return 'Eyes Closed';
+    // Winking (one eye open, one closed)
+    if ((leftEye < 0.3 && rightEye > 0.6) || (rightEye < 0.3 && leftEye > 0.6)) return 'Winking';
+    // High smile
+    if (smile > 0.8) return 'Happy';
+    // Moderate smile
+    if (smile > 0.5) return 'Smiling';
+    // Low smile with squinted eyes
+    if (smile < 0.2 && eyesOpen < 0.5) return 'Sad';
+    // Very low smile
+    if (smile < 0.15) return 'Serious';
+    // Default
+    return 'Neutral';
+  }
 
   factory DetectedFace.fromMlKitFace(Face face) {
     return DetectedFace(
       boundingBox: face.boundingBox,
       headEulerAngleY: face.headEulerAngleY,
       headEulerAngleZ: face.headEulerAngleZ,
-      landmarks: [], // TODO: Implement landmark extraction if needed
+      smilingProbability: face.smilingProbability,
+      leftEyeOpenProbability: face.leftEyeOpenProbability,
+      rightEyeOpenProbability: face.rightEyeOpenProbability,
+      landmarks: [],
     );
   }
 }
