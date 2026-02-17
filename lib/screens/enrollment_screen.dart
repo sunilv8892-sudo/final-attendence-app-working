@@ -487,11 +487,41 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     final isReady = _controller != null && _controller!.value.isInitialized;
     final canCapture = isReady && _embedderReady;
 
-    return KeyboardListener(
-      focusNode: _focusNode,
-      autofocus: true,
-      onKeyEvent: _handleKeyEvent,
-      child: Scaffold(
+    return CallbackShortcuts(
+      bindings: {
+        LogicalKeySet(LogicalKeyboardKey.f5): () {
+          if (_autoCapturing) {
+            _stopAutoCapture();
+          } else {
+            _startAutoCapture();
+          }
+        },
+        LogicalKeySet(LogicalKeyboardKey.f6): () {
+          _scrollController.animateTo(
+            (_scrollController.offset + 300).clamp(0.0, _scrollController.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        },
+        LogicalKeySet(LogicalKeyboardKey.f7): () {
+          if (_capturedSamples >= AppConstants.requiredEnrollmentSamples && _embedderReady) {
+            _saveStudent();
+          }
+        },
+        LogicalKeySet(LogicalKeyboardKey.f8): () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('F5: Start Capture · F6: Scroll Down · F7: Save Student · F8: Enrollment Options'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        },
+      },
+      child: KeyboardListener(
+        focusNode: _focusNode,
+        autofocus: true,
+        onKeyEvent: _handleKeyEvent,
+        child: Scaffold(
         appBar: AppBar(
           title: const Text('Enroll Student'),
           flexibleSpace: Container(
@@ -553,116 +583,197 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                         ],
                       ),
                       const SizedBox(height: AppConstants.paddingLarge),
-                      TextField(
-                        controller: _nameController,
+                      Focus(
                         focusNode: _nameFocus,
-                        textInputAction: TextInputAction.next,
-                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
-                        decoration: InputDecoration(
-                          labelText: 'Full Name',
-                          hintText: 'Enter student name',
-                          prefixIcon: const Icon(Icons.person_outline),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
+                        onKey: (node, event) {
+                          if (event is KeyDownEvent &&
+                              (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+                            FocusScope.of(context).nextFocus();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: TextField(
+                          controller: _nameController,
+                          focusNode: _nameFocus,
+                          textInputAction: TextInputAction.next,
+                          onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+                          decoration: InputDecoration(
+                            labelText: 'Full Name',
+                            hintText: 'Enter student name',
+                            prefixIcon: const Icon(Icons.person_outline),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppConstants.borderRadius,
+                              ),
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(height: AppConstants.paddingMedium),
-                      TextField(
-                        controller: _rollController,
+                      Focus(
                         focusNode: _rollFocus,
-                        textInputAction: TextInputAction.next,
-                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
-                        decoration: InputDecoration(
-                          labelText: 'Roll Number',
-                          hintText: 'e.g., 21CS01',
-                          prefixIcon: const Icon(Icons.numbers),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
+                        onKey: (node, event) {
+                          if (event is KeyDownEvent &&
+                              (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+                            FocusScope.of(context).nextFocus();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: TextField(
+                          controller: _rollController,
+                          focusNode: _rollFocus,
+                          textInputAction: TextInputAction.next,
+                          onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+                          decoration: InputDecoration(
+                            labelText: 'Roll Number',
+                            hintText: 'e.g., 21CS01',
+                            prefixIcon: const Icon(Icons.numbers),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppConstants.borderRadius,
+                              ),
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(height: AppConstants.paddingMedium),
-                      TextField(
-                        controller: _classController,
+                      Focus(
                         focusNode: _classFocus,
-                        textInputAction: TextInputAction.next,
-                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
-                        decoration: InputDecoration(
-                          labelText: 'Class/Section',
-                          hintText: 'e.g., CSE-A',
-                          prefixIcon: const Icon(Icons.school),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
+                        onKey: (node, event) {
+                          if (event is KeyDownEvent &&
+                              (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+                            FocusScope.of(context).nextFocus();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: TextField(
+                          controller: _classController,
+                          focusNode: _classFocus,
+                          textInputAction: TextInputAction.next,
+                          onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+                          decoration: InputDecoration(
+                            labelText: 'Class/Section',
+                            hintText: 'e.g., CSE-A',
+                            prefixIcon: const Icon(Icons.school),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppConstants.borderRadius,
+                              ),
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(height: AppConstants.paddingMedium),
                       // Keyboard-aware gender selection: arrow up/down changes selection, Enter moves focus
-                      DropdownButtonFormField<String>(
-                        value: _selectedGender,
+                      Focus(
                         focusNode: _genderFocus,
-                        decoration: InputDecoration(
-                          labelText: 'Gender',
-                          prefixIcon: const Icon(Icons.wc),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
-                            ),
-                          ),
-                        ),
-                        items: _genders.map((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
-                        onChanged: (String? newValue) {
-                          if (newValue == null) return;
-                          setState(() {
-                            _selectedGender = newValue;
-                            _genderIndex = _genders.indexOf(newValue);
-                          });
+                        onKey: (node, event) {
+                          if (event is KeyDownEvent) {
+                            if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                              setState(() {
+                                _genderIndex = (_genderIndex + 1) % _genders.length;
+                                _selectedGender = _genders[_genderIndex];
+                              });
+                              return KeyEventResult.handled;
+                            }
+                            if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                              setState(() {
+                                _genderIndex = (_genderIndex - 1 + _genders.length) % _genders.length;
+                                _selectedGender = _genders[_genderIndex];
+                              });
+                              return KeyEventResult.handled;
+                            }
+                            if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+                              FocusScope.of(context).nextFocus();
+                              return KeyEventResult.handled;
+                            }
+                          }
+                          return KeyEventResult.ignored;
                         },
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedGender,
+                          focusNode: _genderFocus,
+                          decoration: InputDecoration(
+                            labelText: 'Gender',
+                            prefixIcon: const Icon(Icons.wc),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppConstants.borderRadius,
+                              ),
+                            ),
+                          ),
+                          items: _genders.map((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(value),
+                            );
+                          }).toList(),
+                          onChanged: (String? newValue) {
+                            if (newValue == null) return;
+                            setState(() {
+                              _selectedGender = newValue;
+                              _genderIndex = _genders.indexOf(newValue);
+                            });
+                          },
+                        ),
                       ),
                       const SizedBox(height: AppConstants.paddingMedium),
-                      TextField(
-                        controller: _ageController,
+                      Focus(
                         focusNode: _ageFocus,
-                        textInputAction: TextInputAction.next,
-                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'Age',
-                          hintText: 'e.g., 20',
-                          prefixIcon: const Icon(Icons.calendar_today),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
+                        onKey: (node, event) {
+                          if (event is KeyDownEvent &&
+                              (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+                            FocusScope.of(context).nextFocus();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: TextField(
+                          controller: _ageController,
+                          focusNode: _ageFocus,
+                          textInputAction: TextInputAction.next,
+                          onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'Age',
+                            hintText: 'e.g., 20',
+                            prefixIcon: const Icon(Icons.calendar_today),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppConstants.borderRadius,
+                              ),
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(height: AppConstants.paddingMedium),
-                      TextField(
-                        controller: _phoneController,
+                      Focus(
                         focusNode: _phoneFocus,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
-                        keyboardType: TextInputType.phone,
-                        decoration: InputDecoration(
-                          labelText: 'Phone Number',
-                          hintText: 'e.g., +1234567890',
-                          prefixIcon: const Icon(Icons.phone),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
+                        onKey: (node, event) {
+                          if (event is KeyDownEvent &&
+                              (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+                            FocusScope.of(context).unfocus();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: TextField(
+                          controller: _phoneController,
+                          focusNode: _phoneFocus,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                          keyboardType: TextInputType.phone,
+                          decoration: InputDecoration(
+                            labelText: 'Phone Number',
+                            hintText: 'e.g., +1234567890',
+                            prefixIcon: const Icon(Icons.phone),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppConstants.borderRadius,
+                              ),
                             ),
                           ),
                         ),
