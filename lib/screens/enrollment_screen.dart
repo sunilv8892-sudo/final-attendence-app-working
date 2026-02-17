@@ -629,6 +629,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                             _selectedGender = newValue;
                             _genderIndex = _genders.indexOf(newValue);
                           });
+                          // Move focus to next field after dropdown closes (post-frame)
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            FocusScope.of(context).nextFocus();
+                          });
                         },
                       ),
                       const SizedBox(height: AppConstants.paddingMedium),
