@@ -499,15 +499,15 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
           ),
           actions: [
             Tooltip(
-              message: 'F5: Capture  F6: Down  F7: Save  F8: Up',
+                  message: 'F5: Capture  F6: Down  F7: Save  F8: Options',
               child: IconButton(
                 icon: const Icon(Icons.keyboard, size: 20),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('F5: Start Capture · F6: Scroll Down · F7: Save Student · F8: Scroll Up'),
-                      duration: Duration(seconds: 3),
-                    ),
+                        const SnackBar(
+                          content: Text('F5: Start Capture · F6: Scroll Down · F7: Save Student · F8: Enrollment Options'),
+                          duration: Duration(seconds: 3),
+                        ),
                   );
                 },
               ),
@@ -978,13 +978,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       return;
     }
 
-    // Lowercase/uppercase 'F' key to save (in addition to F7)
-    if (event.logicalKey == LogicalKeyboardKey.keyF) {
-      if (_capturedSamples >= AppConstants.requiredEnrollmentSamples && _embedderReady) {
-        _saveStudent();
-      }
-      return;
-    }
+    // NOTE: single-letter 'F' shortcut removed to avoid accidental saves
 
     switch (event.logicalKey) {
       case LogicalKeyboardKey.f5:
@@ -1010,11 +1004,12 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         }
         break;
       case LogicalKeyboardKey.f8:
-        // F8: Scroll up
-        _scrollController.animateTo(
-          (_scrollController.offset - 300).clamp(0.0, _scrollController.position.maxScrollExtent),
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
+        // F8: Open enrollment options (same behavior as the AppBar keyboard icon)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('F5: Start Capture · F6: Scroll Down · F7: Save Student · F8: Enrollment Options'),
+            duration: Duration(seconds: 3),
+          ),
         );
         break;
       default:
