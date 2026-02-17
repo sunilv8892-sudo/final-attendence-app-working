@@ -47,10 +47,20 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   // Keyboard shortcuts & scrolling
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
+  // Per-field focus nodes for hardware keyboard navigation
+  final FocusNode _nameFocus = FocusNode();
+  final FocusNode _rollFocus = FocusNode();
+  final FocusNode _classFocus = FocusNode();
+  final FocusNode _genderFocus = FocusNode();
+  final FocusNode _ageFocus = FocusNode();
+  final FocusNode _phoneFocus = FocusNode();
+  final List<String> _genders = ['Male', 'Female', 'Other'];
+  int _genderIndex = 0;
 
   @override
   void initState() {
     super.initState();
+    _genderIndex = _genders.indexOf(_selectedGender);
     _initialize();
   }
 
@@ -66,6 +76,12 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     _phoneController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
+    _nameFocus.dispose();
+    _rollFocus.dispose();
+    _classFocus.dispose();
+    _genderFocus.dispose();
+    _ageFocus.dispose();
+    _phoneFocus.dispose();
     super.dispose();
   }
 
@@ -539,6 +555,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                       const SizedBox(height: AppConstants.paddingLarge),
                       TextField(
                         controller: _nameController,
+                        focusNode: _nameFocus,
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
                         decoration: InputDecoration(
                           labelText: 'Full Name',
                           hintText: 'Enter student name',
@@ -553,6 +572,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                       const SizedBox(height: AppConstants.paddingMedium),
                       TextField(
                         controller: _rollController,
+                        focusNode: _rollFocus,
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
                         decoration: InputDecoration(
                           labelText: 'Roll Number',
                           hintText: 'e.g., 21CS01',
@@ -567,6 +589,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                       const SizedBox(height: AppConstants.paddingMedium),
                       TextField(
                         controller: _classController,
+                        focusNode: _classFocus,
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
                         decoration: InputDecoration(
                           labelText: 'Class/Section',
                           hintText: 'e.g., CSE-A',
@@ -579,8 +604,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                         ),
                       ),
                       const SizedBox(height: AppConstants.paddingMedium),
+                      // Keyboard-aware gender selection: arrow up/down changes selection, Enter moves focus
                       DropdownButtonFormField<String>(
                         value: _selectedGender,
+                        focusNode: _genderFocus,
                         decoration: InputDecoration(
                           labelText: 'Gender',
                           prefixIcon: const Icon(Icons.wc),
@@ -590,21 +617,26 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                             ),
                           ),
                         ),
-                        items: ['Male', 'Female', 'Other'].map((String value) {
+                        items: _genders.map((String value) {
                           return DropdownMenuItem<String>(
                             value: value,
                             child: Text(value),
                           );
                         }).toList(),
                         onChanged: (String? newValue) {
+                          if (newValue == null) return;
                           setState(() {
-                            _selectedGender = newValue!;
+                            _selectedGender = newValue;
+                            _genderIndex = _genders.indexOf(newValue);
                           });
                         },
                       ),
                       const SizedBox(height: AppConstants.paddingMedium),
                       TextField(
                         controller: _ageController,
+                        focusNode: _ageFocus,
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
                           labelText: 'Age',
@@ -620,6 +652,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                       const SizedBox(height: AppConstants.paddingMedium),
                       TextField(
                         controller: _phoneController,
+                        focusNode: _phoneFocus,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
                         keyboardType: TextInputType.phone,
                         decoration: InputDecoration(
                           labelText: 'Phone Number',
@@ -915,6 +950,41 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return;
+    // If gender field has focus, handle arrow keys to change selection
+    if (_genderFocus.hasFocus) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        setState(() {
+          _genderIndex = (_genderIndex + 1) % _genders.length;
+          _selectedGender = _genders[_genderIndex];
+        });
+        return;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        setState(() {
+          _genderIndex = (_genderIndex - 1 + _genders.length) % _genders.length;
+          _selectedGender = _genders[_genderIndex];
+        });
+        return;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+        FocusScope.of(context).nextFocus();
+        return;
+      }
+    }
+
+    // Enter: move focus to next field
+    if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      FocusScope.of(context).nextFocus();
+      return;
+    }
+
+    // Lowercase/uppercase 'F' key to save (in addition to F7)
+    if (event.logicalKey == LogicalKeyboardKey.keyF) {
+      if (_capturedSamples >= AppConstants.requiredEnrollmentSamples && _embedderReady) {
+        _saveStudent();
+      }
+      return;
+    }
 
     switch (event.logicalKey) {
       case LogicalKeyboardKey.f5:
