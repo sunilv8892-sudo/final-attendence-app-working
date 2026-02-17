@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
@@ -43,6 +44,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   // Performance tracking
   int _embeddingDim = 0;
 
+  // Keyboard shortcuts & scrolling
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +64,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     _classController.dispose();
     _ageController.dispose();
     _phoneController.dispose();
+    _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -464,15 +471,36 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     final isReady = _controller != null && _controller!.value.isInitialized;
     final canCapture = isReady && _embedderReady;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Enroll Student'),
-        flexibleSpace: Container(
-          decoration: BoxDecoration(gradient: AppConstants.blueGradient),
+    return KeyboardListener(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: _handleKeyEvent,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Enroll Student'),
+          flexibleSpace: Container(
+            decoration: BoxDecoration(gradient: AppConstants.blueGradient),
+          ),
+          actions: [
+            Tooltip(
+              message: 'F5: Capture  F6: Down  F7: Save  F8: Up',
+              child: IconButton(
+                icon: const Icon(Icons.keyboard, size: 20),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('F5: Start Capture · F6: Scroll Down · F7: Save Student · F8: Scroll Up'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
-      ),
-      body: AnimatedBackground(
-        child: SingleChildScrollView(
+        body: AnimatedBackground(
+          child: SingleChildScrollView(
+            controller: _scrollController,
           padding: const EdgeInsets.all(AppConstants.paddingMedium),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -881,6 +909,46 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
           ),
         ),
       ),
+    ),
     );
+  }
+
+  void _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return;
+
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.f5:
+        // F5: Start/stop auto capture
+        if (_autoCapturing) {
+          _stopAutoCapture();
+        } else {
+          _startAutoCapture();
+        }
+        break;
+      case LogicalKeyboardKey.f6:
+        // F6: Scroll down
+        _scrollController.animateTo(
+          (_scrollController.offset + 300).clamp(0.0, _scrollController.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+        break;
+      case LogicalKeyboardKey.f7:
+        // F7: Save student
+        if (_capturedSamples >= AppConstants.requiredEnrollmentSamples && _embedderReady) {
+          _saveStudent();
+        }
+        break;
+      case LogicalKeyboardKey.f8:
+        // F8: Scroll up
+        _scrollController.animateTo(
+          (_scrollController.offset - 300).clamp(0.0, _scrollController.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+        break;
+      default:
+        break;
+    }
   }
 }

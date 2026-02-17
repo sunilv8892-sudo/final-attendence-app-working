@@ -83,7 +83,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppConstants.cardColor,
+      backgroundColor: AppConstants.backgroundColor,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: const Text('Face Attendance'),
         elevation: 0,
@@ -91,23 +92,12 @@ class _HomeScreenState extends State<HomeScreen> {
         foregroundColor: AppConstants.textPrimary,
         actions: [
           IconButton(
-            icon: Icon(Icons.info_outline, color: AppConstants.primaryColor),
+            icon: Icon(Icons.info_outline, color: AppConstants.primaryLight),
             onPressed: () => _showAboutDialog(context),
           ),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppConstants.cardColor,
-              AppConstants.cardColor.withAlpha(245),
-              AppConstants.cardColor.withAlpha(240),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
+      body: AnimatedBackground(
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -132,21 +122,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeaderSection() {
-    return Container(
+    return GlassContainer(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppConstants.primaryColor.withAlpha(20),
-            AppConstants.primaryColor.withAlpha(10),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppConstants.primaryColor.withAlpha(30),
-          width: 1,
-        ),
-      ),
+      glowColor: AppConstants.primaryColor,
       child: Row(
         children: [
           Container(
@@ -162,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
               boxShadow: [
                 BoxShadow(
                   color: AppConstants.primaryColor.withAlpha(100),
-                  blurRadius: 12,
+                  blurRadius: 16,
                   offset: const Offset(0, 4),
                 ),
               ],
@@ -531,20 +509,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBottomStatsBar() {
-    return Container(
+    return GlassContainer(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppConstants.cardColor,
-        borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x1A000000),
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
       child: RepaintBoundary(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -625,11 +592,12 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           gradient: gradient,
           borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
           boxShadow: [
             BoxShadow(
-              color: gradient.colors.first.withAlpha(100),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
+              color: gradient.colors.first.withAlpha(120),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
@@ -675,16 +643,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return InkWell(
       onTap: () => Navigator.pushNamed(context, route),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
         decoration: BoxDecoration(
-          color: AppConstants.cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withAlpha(50)),
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.25), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: color.withAlpha(20),
-              blurRadius: 8,
+              color: color.withValues(alpha: 0.15),
+              blurRadius: 16,
+              spreadRadius: -4,
               offset: const Offset(0, 4),
             ),
           ],
@@ -697,8 +666,15 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: color.withAlpha(20),
+                  color: color.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      spreadRadius: -2,
+                    ),
+                  ],
                 ),
                 child: Icon(icon, color: color, size: 24),
               ),
@@ -716,7 +692,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(
                 subtitle,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10,
                   color: AppConstants.textSecondary,
                 ),

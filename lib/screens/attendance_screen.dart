@@ -58,8 +58,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   // Per-student consecutive detection tracking (supports multiple faces)
   final Map<int, int> _consecutiveDetectionsMap = {};
-  static const int _requiredConsecutiveDetections =
+    static const int _requiredConsecutiveDetections =
       2; // Require 2 consecutive matches
+  int? _lastSingleFaceMatchId; // Prevents alternating identity false positives
 
   // Face overlay
   List<DetectedFace> _overlayFaces = [];
@@ -256,8 +257,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           // Find matching student with similarity check
           final match = _findMatchingStudent(embedding);
           if (match != null) {
-            // Track consecutive detections per student (supports multiple faces)
             final studentId = match.id!;
+
+            // For single-face: reset counters if identity changes between frames
+            if (validFaces.length == 1) {
+              if (_lastSingleFaceMatchId != null && _lastSingleFaceMatchId != studentId) {
+                _consecutiveDetectionsMap.clear();
+                debugPrint('🔄 Identity changed — consecutive counters reset');
+              }
+              _lastSingleFaceMatchId = studentId;
+            }
+
+            // Track consecutive detections per student
             _consecutiveDetectionsMap[studentId] =
                 (_consecutiveDetectionsMap[studentId] ?? 0) + 1;
 
@@ -359,6 +370,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   void _stopScanning() {
     _isScanning = false;
     _consecutiveDetectionsMap.clear();
+    _lastSingleFaceMatchId = null;
     if (mounted) setState(() {});
   }
 
@@ -418,24 +430,53 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Student? _findMatchingStudent(List<double> embedding) {
-    double bestSimilarity = 0.0;
-    Student? bestMatch;
+    // Calculate best similarity per student
+    final Map<int, double> studentBestSimilarity = {};
 
     for (final student in _enrolledStudents) {
       final studentEmbeddings = _studentEmbeddings[student.id] ?? [];
+      double best = 0.0;
       for (final studentEmb in studentEmbeddings) {
         final similarity = _cosineSimilarity(embedding, studentEmb);
-        if (similarity > bestSimilarity) {
-          bestSimilarity = similarity;
-          bestMatch = student;
-        }
+        if (similarity > best) best = similarity;
       }
+      studentBestSimilarity[student.id!] = best;
+    }
+
+    if (studentBestSimilarity.isEmpty) return null;
+
+    // Sort by similarity descending
+    final sorted = studentBestSimilarity.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    final bestId = sorted[0].key;
+    final bestSim = sorted[0].value;
+    final secondBestSim = sorted.length > 1 ? sorted[1].value : 0.0;
+    final margin = bestSim - secondBestSim;
+    final bestStudent = _enrolledStudents.firstWhere((s) => s.id == bestId);
+
+    // Check threshold
+    if (bestSim < _similarityThreshold) {
+      debugPrint(
+        '🔍 Best match: ${bestStudent.name} (${bestSim.toStringAsFixed(3)}) [threshold: ${_similarityThreshold.toStringAsFixed(2)}] — BELOW THRESHOLD',
+      );
+      return null;
+    }
+
+    // Reject ambiguous matches: best must be sufficiently better than 2nd best
+    const double requiredMargin = 0.04;
+    if (sorted.length > 1 && margin < requiredMargin) {
+      final secondStudent = _enrolledStudents.firstWhere((s) => s.id == sorted[1].key);
+      debugPrint(
+        '⚠️ AMBIGUOUS: ${bestStudent.name} (${bestSim.toStringAsFixed(3)}) vs ${secondStudent.name} (${secondBestSim.toStringAsFixed(3)}) — margin ${margin.toStringAsFixed(3)} < $requiredMargin',
+      );
+      return null;
     }
 
     debugPrint(
-      '🔍 Best match: ${bestMatch?.name} (similarity: ${bestSimilarity.toStringAsFixed(3)}) [threshold: ${_similarityThreshold.toStringAsFixed(2)}]',
+      '🔍 Best match: ${bestStudent.name} (${bestSim.toStringAsFixed(3)}) [threshold: ${_similarityThreshold.toStringAsFixed(2)}] margin: ${margin.toStringAsFixed(3)}',
     );
-    return bestSimilarity > _similarityThreshold ? bestMatch : null;
+    return bestStudent;
   }
 
   double _cosineSimilarity(List<double> a, List<double> b) {
