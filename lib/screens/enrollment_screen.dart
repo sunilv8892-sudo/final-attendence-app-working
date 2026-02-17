@@ -954,6 +954,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return;
+    debugPrint('Keyboard event: ${event.logicalKey.debugName}');
     // If gender field has focus, handle arrow keys to change selection
     if (_genderFocus.hasFocus) {
       if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
