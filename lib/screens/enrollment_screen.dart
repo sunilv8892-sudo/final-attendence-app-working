@@ -487,41 +487,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     final isReady = _controller != null && _controller!.value.isInitialized;
     final canCapture = isReady && _embedderReady;
 
-    return CallbackShortcuts(
-      bindings: {
-        LogicalKeySet(LogicalKeyboardKey.f5): () {
-          if (_autoCapturing) {
-            _stopAutoCapture();
-          } else {
-            _startAutoCapture();
-          }
-        },
-        LogicalKeySet(LogicalKeyboardKey.f6): () {
-          _scrollController.animateTo(
-            (_scrollController.offset + 300).clamp(0.0, _scrollController.position.maxScrollExtent),
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        },
-        LogicalKeySet(LogicalKeyboardKey.f7): () {
-          if (_capturedSamples >= AppConstants.requiredEnrollmentSamples && _embedderReady) {
-            _saveStudent();
-          }
-        },
-        LogicalKeySet(LogicalKeyboardKey.f8): () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('F5: Start Capture · F6: Scroll Down · F7: Save Student · F8: Enrollment Options'),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        },
-      },
-      child: KeyboardListener(
-        focusNode: _focusNode,
-        autofocus: true,
-        onKeyEvent: _handleKeyEvent,
-        child: Scaffold(
+    return KeyboardListener(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: _handleKeyEvent,
+      child: Scaffold(
         appBar: AppBar(
           title: const Text('Enroll Student'),
           flexibleSpace: Container(
@@ -1059,7 +1029,6 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
           ),
         ),
       ),
-    ),
     );
   }
 
