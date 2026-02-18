@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 
 /// AnimatedBackground with a subtle animated mesh gradient
 class AnimatedBackground extends StatefulWidget {
@@ -41,11 +42,11 @@ class _AnimatedBackgroundState extends State<AnimatedBackground>
             gradient: LinearGradient(
               begin: Alignment(-1.0 + t * 0.6, -1.0),
               end: Alignment(1.0 - t * 0.6, 1.0),
-              colors: const [
-                Color(0xFF0F0C29),
-                Color(0xFF302B63),
-                Color(0xFF24243E),
-                Color(0xFF0F0C29),
+              colors: [
+                AppConstants.backgroundColor,
+                AppConstants.secondaryColor,
+                AppConstants.surfaceColor,
+                AppConstants.backgroundColor,
               ],
               stops: [0.0, 0.3 + t * 0.1, 0.7 - t * 0.1, 1.0],
             ),

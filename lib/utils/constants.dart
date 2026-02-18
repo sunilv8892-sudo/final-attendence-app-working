@@ -8,15 +8,15 @@ class AppConstants {
   static const String subtitle =
       'Offline Mobile Face Recognition Attendance System Using Face Embedding and Similarity Matching';
 
-  // Colors - Glassmorphism Theme
-  static const Color primaryColor = Color(0xFF2E7D32);      // Green 700
-  static const Color primaryDark = Color(0xFF1B5E20);       // Green 900
-  static const Color primaryLight = Color(0xFF66BB6A);      // Green 400
-  static const Color accentColor = Color(0xFF0288D1);       // Light Blue 700
-  static const Color accentDark = Color(0xFF0277BD);        // Light Blue 800
+  // Colors - Silver / Black Glass Theme
+  static const Color primaryColor = Color(0xFFC0C7D1);      // Silver
+  static const Color primaryDark = Color(0xFF8B95A5);       // Steel
+  static const Color primaryLight = Color(0xFFE5EAF0);      // Light Silver
+  static const Color accentColor = Color(0xFFB0BEC5);       // Cool Silver
+  static const Color accentDark = Color(0xFF78909C);        // Slate Silver
   
-  static const Color secondaryColor = Color(0xFF0F0C29);    // Midnight
-  static const Color surfaceColor = Color(0xFF1A1A2E);      // Night Surface
+  static const Color secondaryColor = Color(0xFF0B0D10);    // Carbon Black
+  static const Color surfaceColor = Color(0xFF11161B);      // Dark Surface
   
   static const Color successColor = Color(0xFF10B981);      // Emerald
   static const Color successLight = Color(0xFF34D399);      // Light Emerald
@@ -24,15 +24,15 @@ class AppConstants {
   static const Color errorColor = Color(0xFFEF4444);        // Red
   static const Color errorLight = Color(0xFFF87171);        // Light Red
   
-  static const Color backgroundColor = Color(0xFF0F0C29);   // Deep Midnight
-  static const Color cardColor = Color(0xFF1A1A2E);         // Card Surface
+  static const Color backgroundColor = Color(0xFF050607);   // Pure Dark
+  static const Color cardColor = Color(0xFF101317);         // Glass Card Surface
   static const Color cardBorder = Color(0x33FFFFFF);         // Glass Border
   
-  static const Color textPrimary = Color(0xFFF1F5F9);       // Near White
-  static const Color textSecondary = Color(0xFF94A3B8);     // Cool Gray
-  static const Color textTertiary = Color(0xFF64748B);      // Slate
+  static const Color textPrimary = Color(0xFFF8FAFC);       // Near White
+  static const Color textSecondary = Color(0xFFB0BAC8);     // Silver Gray
+  static const Color textTertiary = Color(0xFF7C8798);      // Muted Slate
   
-  static const Color inputFill = Color(0xFF16213E);         // Dark Blue
+  static const Color inputFill = Color(0xFF171C22);         // Dark Input Glass
   static const Color inputBorder = Color(0x33FFFFFF);       // Glass Border
   
   static const Color dividerColor = Color(0x1AFFFFFF);      // White 10%
@@ -41,9 +41,9 @@ class AppConstants {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF0F0C29),
-      Color(0xFF302B63),
-      Color(0xFF24243E),
+      Color(0xFF050607),
+      Color(0xFF0B0D10),
+      Color(0xFF14181D),
     ],
   );
   
@@ -51,9 +51,9 @@ class AppConstants {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF2E7D32),
-      Color(0xFF43A047),
-      Color(0xFF1B5E20),
+      Color(0xFF2A2F36),
+      Color(0xFF3A424D),
+      Color(0xFF1E232A),
     ],
   );
   
@@ -61,8 +61,8 @@ class AppConstants {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF06B6D4),
-      Color(0xFF0891B2),
+      Color(0xFFD1D5DB),
+      Color(0xFF9CA3AF),
     ],
   );
 
@@ -91,7 +91,7 @@ class AppConstants {
   );
   
   static const BoxShadow buttonShadow = BoxShadow(
-    color: Color(0x407C6CF6),
+    color: Color(0x40B0BEC5),
     blurRadius: 20.0,
     offset: Offset(0, 8),
   );

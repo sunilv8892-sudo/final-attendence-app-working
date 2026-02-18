@@ -100,19 +100,28 @@ class _HomeScreenState extends State<HomeScreen> {
       body: AnimatedBackground(
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
               children: [
-                // Header Section
                 _buildHeaderSection(),
-
-                const SizedBox(height: 24),
-
-                // Main Dashboard Grid
-                Expanded(child: _buildDashboardGrid(context)),
-
-                // Bottom Stats Bar
+                const SizedBox(height: 14),
                 _buildBottomStatsBar(),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Text(
+                      'Quick Actions',
+                      style: TextStyle(
+                        color: AppConstants.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Expanded(child: _buildDashboardGrid(context)),
               ],
             ),
           ),
@@ -123,23 +132,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHeaderSection() {
     return GlassContainer(
-      padding: const EdgeInsets.all(20),
-      glowColor: AppConstants.primaryColor,
+      padding: const EdgeInsets.all(18),
+      glowColor: AppConstants.primaryDark,
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 colors: [
-                  AppConstants.primaryColor,
-                  AppConstants.primaryColor.withAlpha(180),
+                  Color(0xFFB8C0CC),
+                  Color(0xFF8B95A5),
                 ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppConstants.primaryColor.withAlpha(100),
+                  color: AppConstants.primaryDark.withAlpha(90),
                   blurRadius: 16,
                   offset: const Offset(0, 4),
                 ),
@@ -147,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: const Icon(
               Icons.face_retouching_natural,
-              color: Colors.white,
+              color: Color(0xFF0B0D10),
               size: 32,
             ),
           ),
@@ -159,15 +170,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   'Smart Attendance',
                   style: TextStyle(
-                    fontSize: 22,
+                    fontSize: 21,
                     fontWeight: FontWeight.bold,
                     color: AppConstants.textPrimary,
-                    letterSpacing: 0.5,
+                    letterSpacing: 0.3,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'AI-powered face recognition system',
+                  'Glass UI • Offline Face Recognition',
                   style: TextStyle(
                     fontSize: 14,
                     color: AppConstants.textSecondary,
@@ -185,21 +196,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildDashboardGrid(BuildContext context) {
     return GridView.count(
       crossAxisCount: 2,
-      mainAxisSpacing: 16,
-      crossAxisSpacing: 16,
-      childAspectRatio: 1.1,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 1.03,
       children: [
-        // Primary Actions
         _buildHexagonalCard(
           context,
           icon: Icons.person_add,
           title: 'Enroll\nStudents',
           subtitle: 'Add faces',
-          gradient: const LinearGradient(
-            colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          gradient: AppConstants.blueGradient,
           route: AppConstants.routeEnroll,
         ),
 
@@ -209,20 +215,19 @@ class _HomeScreenState extends State<HomeScreen> {
           title: 'Take\nAttendance',
           subtitle: 'Scan faces',
           gradient: const LinearGradient(
-            colors: [Color(0xFF11998E), Color(0xFF38EF7D)],
+            colors: [Color(0xFF3B424D), Color(0xFF1F242B)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           route: AppConstants.routeAttendance,
         ),
 
-        // Management Tools
         _buildCircularCard(
           context,
           icon: Icons.mood,
           title: 'Expression\nDetection',
           subtitle: 'Detect emotions',
-          color: const Color(0xFFFFA726),
+          color: AppConstants.primaryLight,
           route: AppConstants.routeExpressionDetection,
         ),
 
@@ -231,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.download_rounded,
           title: 'Export',
           subtitle: 'Reports',
-          color: const Color(0xFF42A5F5),
+          color: AppConstants.accentColor,
           route: AppConstants.routeExport,
         ),
 
@@ -240,17 +245,16 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.tune,
           title: 'Settings',
           subtitle: 'Configure',
-          color: const Color(0xFFAB47BC),
+          color: AppConstants.primaryColor,
           route: AppConstants.routeSettings,
         ),
 
-        // Feature Highlight
         _buildCircularCard(
           context,
           icon: Icons.storage,
           title: 'Database',
           subtitle: 'Manage students',
-          color: const Color(0xFF78909C),
+          color: const Color(0xFF94A3B8),
           route: AppConstants.routeDatabase,
         ),
       ],
@@ -510,7 +514,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBottomStatsBar() {
     return GlassContainer(
-      margin: const EdgeInsets.only(top: 16),
+      margin: EdgeInsets.zero,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: RepaintBoundary(
         child: Row(
@@ -520,19 +524,19 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.people,
               value: _totalStudents.toString(),
               label: 'Students',
-              color: const Color(0xFF667EEA),
+              color: AppConstants.primaryLight,
             ),
             _buildStatItem(
               icon: Icons.check_circle,
               value: _presentToday.toString(),
               label: 'Present Today',
-              color: const Color(0xFF11998E),
+              color: AppConstants.primaryColor,
             ),
             _buildStatItem(
               icon: Icons.schedule,
               value: _totalSessions.toString(),
               label: 'Sessions',
-              color: const Color(0xFFFFA726),
+              color: AppConstants.accentColor,
             ),
           ],
         ),
@@ -592,11 +596,11 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           gradient: gradient,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
           boxShadow: [
             BoxShadow(
-              color: gradient.colors.first.withAlpha(120),
-              blurRadius: 20,
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 18,
               offset: const Offset(0, 8),
             ),
           ],
@@ -606,7 +610,14 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: Colors.white, size: 32),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: Colors.white, size: 24),
+              ),
               const SizedBox(height: 12),
               Text(
                 title,
@@ -648,11 +659,11 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withValues(alpha: 0.25), width: 1.5),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.16), width: 1.2),
           boxShadow: [
             BoxShadow(
-              color: color.withValues(alpha: 0.15),
-              blurRadius: 16,
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 14,
               spreadRadius: -4,
               offset: const Offset(0, 4),
             ),
