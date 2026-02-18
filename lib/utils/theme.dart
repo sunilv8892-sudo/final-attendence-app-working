@@ -4,11 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 class AppColors {
   AppColors._();
 
-  // Primary palette (Indigo / Cyan)
-  static const Color primary = Color(0xFF3F51B5); // Indigo 500
-  static const Color primaryVariant = Color(0xFF303F9F); // Indigo 700
-  static const Color secondary = Color(0xFF00BCD4); // Cyan 500
-  static const Color accent = Color(0xFF00ACC1); // Cyan accent
+  // Primary palette (Teal / Amber)
+  static const Color primary = Color(0xFF00695C); // Teal 800
+  static const Color primaryVariant = Color(0xFF004D40); // Teal 900
+  static const Color secondary = Color(0xFFFFA000); // Amber 700
+  static const Color accent = Color(0xFFFFC107); // Amber 500
 
   // UI neutrals
   static const Color background = Color(0xFFF5F7FA);
