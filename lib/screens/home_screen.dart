@@ -108,14 +108,41 @@ class _HomeScreenState extends State<HomeScreen> {
                 _buildBottomStatsBar(),
                 const SizedBox(height: 18),
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       'Quick Actions',
                       style: TextStyle(
                         color: AppConstants.textPrimary,
                         fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.35,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: AppConstants.goldGradient,
+                        borderRadius: BorderRadius.circular(999),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppConstants.accentColor.withAlpha(70),
+                            blurRadius: 12,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: const Text(
+                        'LIVE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.6,
+                        ),
                       ),
                     ),
                   ],
@@ -141,8 +168,8 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [
-                  Color(0xFFD9E2EC),
-                  Color(0xFF4ECDC4),
+                  Color(0xFF38BDF8),
+                  Color(0xFF22D3EE),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -158,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: const Icon(
               Icons.face_retouching_natural,
-              color: Color(0xFF0A1A20),
+              color: Color(0xFF031A22),
               size: 32,
             ),
           ),
@@ -170,15 +197,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   'Smart Attendance',
                   style: TextStyle(
-                    fontSize: 21,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: AppConstants.textPrimary,
-                    letterSpacing: 0.3,
+                    letterSpacing: 0.45,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Chrome Glass • Offline Face Recognition',
+                  'Premium Glass • Real-time Face Recognition',
                   style: TextStyle(
                     fontSize: 14,
                     color: AppConstants.textSecondary,
@@ -215,7 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
           title: 'Take\nAttendance',
           subtitle: 'Scan faces',
           gradient: const LinearGradient(
-            colors: [Color(0xFF1A535C), Color(0xFF4ECDC4)],
+            colors: [Color(0xFF0EA5E9), Color(0xFF22D3EE)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -227,7 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.mood,
           title: 'Expression\nDetection',
           subtitle: 'Detect emotions',
-          color: AppConstants.primaryLight,
+          color: const Color(0xFF7DD3FC),
           route: AppConstants.routeExpressionDetection,
         ),
 
@@ -236,7 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.download_rounded,
           title: 'Export',
           subtitle: 'Reports',
-          color: AppConstants.accentColor,
+          color: const Color(0xFF22D3EE),
           route: AppConstants.routeExport,
         ),
 
@@ -245,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.tune,
           title: 'Settings',
           subtitle: 'Configure',
-          color: AppConstants.primaryColor,
+          color: const Color(0xFF38BDF8),
           route: AppConstants.routeSettings,
         ),
 
@@ -254,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.storage,
           title: 'Database',
           subtitle: 'Manage students',
-          color: AppConstants.primaryDark,
+          color: const Color(0xFF60A5FA),
           route: AppConstants.routeDatabase,
         ),
       ],
@@ -596,16 +623,16 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           gradient: gradient,
           borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
-            bottomLeft: Radius.circular(18),
-            bottomRight: Radius.circular(18),
+            topLeft: Radius.circular(32),
+            topRight: Radius.circular(16),
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(30),
           ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.24), width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 18,
+              color: gradient.colors.last.withValues(alpha: 0.28),
+              blurRadius: 20,
               offset: const Offset(0, 8),
             ),
           ],
@@ -618,7 +645,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 padding: const EdgeInsets.all(11),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
+                  color: Colors.white.withValues(alpha: 0.22),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, color: Colors.white, size: 24),
@@ -659,23 +686,29 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return InkWell(
       onTap: () => Navigator.pushNamed(context, route),
-      borderRadius: BorderRadius.circular(28),
+      borderRadius: BorderRadius.circular(24),
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              AppConstants.cardColor.withValues(alpha: 0.96),
-              AppConstants.secondaryColor.withValues(alpha: 0.82),
+              AppConstants.cardColor.withValues(alpha: 0.98),
+              AppConstants.secondaryColor.withValues(alpha: 0.88),
             ],
           ),
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(24),
           border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.2),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.3),
               blurRadius: 14,
+              spreadRadius: -4,
+              offset: const Offset(0, 4),
+            ),
+            BoxShadow(
+              color: color.withValues(alpha: 0.14),
+              blurRadius: 16,
               spreadRadius: -4,
               offset: const Offset(0, 4),
             ),
