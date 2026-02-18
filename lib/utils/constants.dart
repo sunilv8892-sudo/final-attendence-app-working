@@ -9,11 +9,11 @@ class AppConstants {
       'Offline Mobile Face Recognition Attendance System Using Face Embedding and Similarity Matching';
 
   // Colors - Glassmorphism Theme
-  static const Color primaryColor = Color(0xFF7C6CF6);      // Royal Purple
-  static const Color primaryDark = Color(0xFF5B4ED4);       // Deep Purple
-  static const Color primaryLight = Color(0xFFA78BFA);      // Lavender
-  static const Color accentColor = Color(0xFF06B6D4);       // Cyan
-  static const Color accentDark = Color(0xFF0891B2);        // Dark Cyan
+  static const Color primaryColor = Color(0xFF3F51B5);      // Indigo 500
+  static const Color primaryDark = Color(0xFF303F9F);       // Indigo 700
+  static const Color primaryLight = Color(0xFF7986CB);      // Indigo 300
+  static const Color accentColor = Color(0xFF00BCD4);       // Cyan 500
+  static const Color accentDark = Color(0xFF0097A7);        // Cyan 700
   
   static const Color secondaryColor = Color(0xFF0F0C29);    // Midnight
   static const Color surfaceColor = Color(0xFF1A1A2E);      // Night Surface
@@ -51,9 +51,9 @@ class AppConstants {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF7C6CF6),
-      Color(0xFF6C63FF),
-      Color(0xFF5B4ED4),
+      Color(0xFF3F51B5),
+      Color(0xFF3949AB),
+      Color(0xFF303F9F),
     ],
   );
   
