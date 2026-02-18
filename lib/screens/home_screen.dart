@@ -168,8 +168,8 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [
-                  Color(0xFFFF4081),
-                  Color(0xFF7C4DFF),
+                  Color(0xFF00C2FF),
+                  Color(0xFF2962FF),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -263,7 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.download_rounded,
           title: 'Export',
           subtitle: 'Reports',
-          color: const Color(0xFF00E5FF),
+          color: const Color(0xFF00C2FF),
           route: AppConstants.routeExport,
         ),
 
@@ -272,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.tune,
           title: 'Settings',
           subtitle: 'Configure',
-          color: const Color(0xFFFF4081),
+          color: const Color(0xFF2962FF),
           route: AppConstants.routeSettings,
         ),
 
@@ -281,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.storage,
           title: 'Database',
           subtitle: 'Manage students',
-          color: const Color(0xFF7C4DFF),
+          color: const Color(0xFF00D09C),
           route: AppConstants.routeDatabase,
         ),
       ],

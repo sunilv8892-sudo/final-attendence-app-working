@@ -8,15 +8,15 @@ class AppConstants {
   static const String subtitle =
       'Offline Mobile Face Recognition Attendance System Using Face Embedding and Similarity Matching';
 
-  // Colors - Bright Aurora Glass Theme
-  static const Color primaryColor = Color(0xFF7C4DFF);      // Vibrant Violet
-  static const Color primaryDark = Color(0xFF5E35B1);       // Royal Purple
-  static const Color primaryLight = Color(0xFFF3E5F5);      // Soft Lavender
-  static const Color accentColor = Color(0xFF00E5FF);       // Electric Cyan
-  static const Color accentDark = Color(0xFF00B8D4);        // Deep Cyan
+  // Colors - Premium Bright (No Pink)
+  static const Color primaryColor = Color(0xFF2962FF);      // Royal Blue
+  static const Color primaryDark = Color(0xFF0039CB);       // Deep Royal Blue
+  static const Color primaryLight = Color(0xFFE3F2FD);      // Soft Ice Blue
+  static const Color accentColor = Color(0xFF00C2FF);       // Electric Cyan
+  static const Color accentDark = Color(0xFF0091EA);        // Deep Cyan
   
-  static const Color secondaryColor = Color(0xFF1E3A8A);    // Deep Blue
-  static const Color surfaceColor = Color(0xFF283593);      // Indigo Surface
+  static const Color secondaryColor = Color(0xFF0F4C81);    // Ocean Blue
+  static const Color surfaceColor = Color(0xFF3657E8);      // Sapphire Surface
   
   static const Color successColor = Color(0xFF10B981);      // Emerald
   static const Color successLight = Color(0xFF34D399);      // Light Emerald
@@ -24,15 +24,15 @@ class AppConstants {
   static const Color errorColor = Color(0xFFEF4444);        // Red
   static const Color errorLight = Color(0xFFF87171);        // Light Red
   
-  static const Color backgroundColor = Color(0xFF1A237E);   // Rich Indigo
-  static const Color cardColor = Color(0xFF283593);         // Bright Glass Card
+  static const Color backgroundColor = Color(0xFF355CFF);   // Bright Gradient Base
+  static const Color cardColor = Color(0xFF2849DB);         // Bright Glass Card
   static const Color cardBorder = Color(0x33FFFFFF);         // Glass Border
   
   static const Color textPrimary = Color(0xFFF8FAFC);       // Soft White
-  static const Color textSecondary = Color(0xFFD1C4E9);     // Light Lavender
-  static const Color textTertiary = Color(0xFFB3E5FC);      // Soft Cyan
+  static const Color textSecondary = Color(0xFFE6F4FF);     // Ice White Blue
+  static const Color textTertiary = Color(0xFFBEE3F8);      // Soft Sky
   
-  static const Color inputFill = Color(0xFF3949AB);         // Indigo Input
+  static const Color inputFill = Color(0xFF3F5FEA);         // Bright Indigo Input
   static const Color inputBorder = Color(0x33FFFFFF);       // Glass Border
   
   static const Color dividerColor = Color(0x1AFFFFFF);      // White 10%
@@ -41,9 +41,9 @@ class AppConstants {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF1A237E),
-      Color(0xFF6A1B9A),
-      Color(0xFF00838F),
+      Color(0xFF355CFF),
+      Color(0xFF00C2FF),
+      Color(0xFF00D09C),
     ],
   );
   
@@ -51,9 +51,9 @@ class AppConstants {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF7C4DFF),
-      Color(0xFF00E5FF),
-      Color(0xFFFF4081),
+      Color(0xFF2962FF),
+      Color(0xFF00C2FF),
+      Color(0xFF00D09C),
     ],
   );
   
@@ -61,8 +61,8 @@ class AppConstants {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFFFFC107),
-      Color(0xFFFF6F00),
+      Color(0xFFFBBF24),
+      Color(0xFFF97316),
     ],
   );
 
@@ -91,7 +91,7 @@ class AppConstants {
   );
   
   static const BoxShadow buttonShadow = BoxShadow(
-    color: Color(0x407C4DFF),
+    color: Color(0x4000C2FF),
     blurRadius: 20.0,
     offset: Offset(0, 8),
   );
