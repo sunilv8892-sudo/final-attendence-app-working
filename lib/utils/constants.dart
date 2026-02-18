@@ -8,32 +8,32 @@ class AppConstants {
   static const String subtitle =
       'Offline Mobile Face Recognition Attendance System Using Face Embedding and Similarity Matching';
 
-  // Colors - Premium Bright (No Pink)
-  static const Color primaryColor = Color(0xFF2962FF);      // Royal Blue
-  static const Color primaryDark = Color(0xFF0039CB);       // Deep Royal Blue
-  static const Color primaryLight = Color(0xFFE3F2FD);      // Soft Ice Blue
-  static const Color accentColor = Color(0xFF00C2FF);       // Electric Cyan
-  static const Color accentDark = Color(0xFF0091EA);        // Deep Cyan
+// Colors — Premium Navy Glass (multi-color accent system)
+  static const Color primaryColor = Color(0xFF6C63FF);      // Vivid Indigo
+  static const Color primaryDark = Color(0xFF4B3FD8);       // Deep Indigo
+  static const Color primaryLight = Color(0xFFE8E6FF);      // Soft Lavender
+  static const Color accentColor = Color(0xFF00D4FF);       // Neon Cyan
+  static const Color accentDark = Color(0xFF009FC2);        // Deep Cyan
   
-  static const Color secondaryColor = Color(0xFF0F4C81);    // Ocean Blue
-  static const Color surfaceColor = Color(0xFF3657E8);      // Sapphire Surface
+  static const Color secondaryColor = Color(0xFF1B2A49);    // Mid Navy
+  static const Color surfaceColor = Color(0xFF243354);      // Card Navy
+
+  static const Color successColor = Color(0xFF00E096);      // Vivid Emerald
+  static const Color successLight = Color(0xFF52FFB8);      // Light Emerald
+  static const Color warningColor = Color(0xFFFFB830);      // Vivid Amber
+  static const Color errorColor = Color(0xFFFF4D4D);        // Vivid Red
+  static const Color errorLight = Color(0xFFFF8080);        // Light Red
   
-  static const Color successColor = Color(0xFF10B981);      // Emerald
-  static const Color successLight = Color(0xFF34D399);      // Light Emerald
-  static const Color warningColor = Color(0xFFF59E0B);      // Amber
-  static const Color errorColor = Color(0xFFEF4444);        // Red
-  static const Color errorLight = Color(0xFFF87171);        // Light Red
+  static const Color backgroundColor = Color(0xFF0D1B2A);   // Deep Navy
+  static const Color cardColor = Color(0xFF1B2A49);         // Card Navy
+  static const Color cardBorder = Color(0x40FFFFFF);        // Glass Border
   
-  static const Color backgroundColor = Color(0xFF355CFF);   // Bright Gradient Base
-  static const Color cardColor = Color(0xFF2849DB);         // Bright Glass Card
-  static const Color cardBorder = Color(0x33FFFFFF);         // Glass Border
+  static const Color textPrimary = Color(0xFFFFFFFF);       // Pure White
+  static const Color textSecondary = Color(0xFFCDD5E0);     // Light Slate
+  static const Color textTertiary = Color(0xFF8B9BB4);      // Muted Slate
   
-  static const Color textPrimary = Color(0xFFF8FAFC);       // Soft White
-  static const Color textSecondary = Color(0xFFE6F4FF);     // Ice White Blue
-  static const Color textTertiary = Color(0xFFBEE3F8);      // Soft Sky
-  
-  static const Color inputFill = Color(0xFF3F5FEA);         // Bright Indigo Input
-  static const Color inputBorder = Color(0x33FFFFFF);       // Glass Border
+  static const Color inputFill = Color(0xFF1B2A49);         // Card Navy Input
+  static const Color inputBorder = Color(0x44FFFFFF);       // Glass Border
   
   static const Color dividerColor = Color(0x1AFFFFFF);      // White 10%
   
@@ -41,29 +41,24 @@ class AppConstants {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF355CFF),
-      Color(0xFF00C2FF),
-      Color(0xFF00D09C),
+      Color(0xFF0D1B2A),
+      Color(0xFF1B2A49),
+      Color(0xFF243354),
     ],
   );
   
+  // Enroll card — Indigo → Violet
   static const LinearGradient blueGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [
-      Color(0xFF2962FF),
-      Color(0xFF00C2FF),
-      Color(0xFF00D09C),
-    ],
+    colors: [Color(0xFF6C63FF), Color(0xFF9B59F5)],
   );
   
+  // Attendance card — Cyan → Teal
   static const LinearGradient goldGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [
-      Color(0xFFFBBF24),
-      Color(0xFFF97316),
-    ],
+    colors: [Color(0xFF00D4FF), Color(0xFF00A878)],
   );
 
   // Glass effect constants
@@ -91,7 +86,7 @@ class AppConstants {
   );
   
   static const BoxShadow buttonShadow = BoxShadow(
-    color: Color(0x4000C2FF),
+    color: Color(0x506C63FF),
     blurRadius: 20.0,
     offset: Offset(0, 8),
   );
@@ -154,8 +149,8 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppConstants.accentColor,
-          foregroundColor: AppConstants.secondaryColor,
+          backgroundColor: AppConstants.primaryColor,
+          foregroundColor: Colors.white,
           elevation: 4,
           shadowColor: AppConstants.buttonShadow.color,
           minimumSize: const Size(double.infinity, AppConstants.buttonHeight),
@@ -168,8 +163,8 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppConstants.primaryLight,
-          side: const BorderSide(color: AppConstants.primaryColor, width: 1.5),
+          foregroundColor: AppConstants.accentColor,
+          side: const BorderSide(color: AppConstants.accentColor, width: 1.5),
           minimumSize: const Size(double.infinity, AppConstants.buttonHeight),
           shape: const StadiumBorder(),
           textStyle: const TextStyle(

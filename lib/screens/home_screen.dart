@@ -86,207 +86,431 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: AppConstants.backgroundColor,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Face Attendance'),
         elevation: 0,
         backgroundColor: Colors.transparent,
-        foregroundColor: AppConstants.textPrimary,
+        titleSpacing: 0,
+        title: Padding(
+          padding: const EdgeInsets.only(left: 20),
+          child: ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              colors: [Color(0xFF00D4FF), Color(0xFF6C63FF)],
+            ).createShader(bounds),
+            child: const Text(
+              'FaceAttend',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.info_outline, color: AppConstants.accentColor),
-            onPressed: () => _showAboutDialog(context),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.info_outline_rounded, color: Color(0xFF00D4FF), size: 22),
+                onPressed: () => _showAboutDialog(context),
+              ),
+            ),
           ),
         ],
       ),
       body: AnimatedBackground(
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeaderSection(),
-                const SizedBox(height: 14),
-                _buildBottomStatsBar(),
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Quick Actions',
-                      style: TextStyle(
-                        color: AppConstants.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.35,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: AppConstants.goldGradient,
-                        borderRadius: BorderRadius.circular(999),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppConstants.accentColor.withAlpha(70),
-                            blurRadius: 12,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: const Text(
-                        'LIVE',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                const SizedBox(height: 16),
+                _buildStatsRow(),
+                const SizedBox(height: 24),
+                _buildSectionLabel('Featured', const Color(0xFF00D4FF)),
                 const SizedBox(height: 12),
-                Expanded(child: _buildDashboardGrid(context)),
+                _buildFeaturedRow(context),
+                const SizedBox(height: 24),
+                _buildSectionLabel('More Tools', const Color(0xFFFFB830)),
+                const SizedBox(height: 12),
+                _buildToolsGrid(context),
+                const SizedBox(height: 12),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // ────────── Section label ──────────
+  Widget _buildSectionLabel(String text, Color accentDot) {
+    return Row(
+      children: [
+        Container(
+          width: 4, height: 18,
+          decoration: BoxDecoration(
+            color: accentDot,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: const TextStyle(
+            color: Color(0xFFFFFFFF),
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ────────── Stats Row ──────────
+  Widget _buildStatsRow() {
+    return Row(
+      children: [
+        _buildStatChip(Icons.groups_rounded, '$_totalStudents', 'Students', const Color(0xFF6C63FF), const Color(0xFF9B59F5)),
+        const SizedBox(width: 10),
+        _buildStatChip(Icons.how_to_reg_rounded, '$_presentToday', 'Present', const Color(0xFF00E096), const Color(0xFF00A878)),
+        const SizedBox(width: 10),
+        _buildStatChip(Icons.calendar_month_rounded, '$_totalSessions', 'Sessions', const Color(0xFFFFB830), const Color(0xFFFF7043)),
+      ],
+    );
+  }
+
+  Widget _buildStatChip(IconData icon, String value, String label, Color c1, Color c2) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [c1.withValues(alpha: 0.22), c2.withValues(alpha: 0.12)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: c1.withValues(alpha: 0.45), width: 1.2),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: c1, size: 22),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: c1,
+              ),
+            ),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 10,
+                color: Color(0xFFCDD5E0),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ────────── Featured Row (Enroll + Attendance) ──────────
+  Widget _buildFeaturedRow(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildFeaturedCard(
+            context,
+            icon: Icons.person_add_alt_1_rounded,
+            title: 'Enroll',
+            subtitle: 'Add new student faces',
+            gradient: const LinearGradient(
+              colors: [Color(0xFF6C63FF), Color(0xFF9B59F5)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+            ),
+            route: AppConstants.routeEnroll,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildFeaturedCard(
+            context,
+            icon: Icons.face_retouching_natural,
+            title: 'Attendance',
+            subtitle: 'Scan & mark faces',
+            gradient: const LinearGradient(
+              colors: [Color(0xFF00D4FF), Color(0xFF00A878)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+            ),
+            route: AppConstants.routeAttendance,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFeaturedCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required LinearGradient gradient,
+    required String route,
+  }) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, route),
+      child: Container(
+        height: 148,
+        decoration: BoxDecoration(
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: gradient.colors.first.withValues(alpha: 0.45),
+              blurRadius: 22,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: Colors.white, size: 26),
+            ),
+            const Spacer(),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white.withValues(alpha: 0.82),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ────────── Tools Grid (4 items) ──────────
+  Widget _buildToolsGrid(BuildContext context) {
+    final tools = [
+      _ToolItem(Icons.mood_rounded, 'Expression', 'Emotions AI', const Color(0xFFFFB830), const Color(0xFFFF7043), AppConstants.routeExpressionDetection),
+      _ToolItem(Icons.download_rounded, 'Export', 'Reports', const Color(0xFF00D4FF), const Color(0xFF00A8E8), AppConstants.routeExport),
+      _ToolItem(Icons.settings_rounded, 'Settings', 'Configure', const Color(0xFF6C63FF), const Color(0xFF9B59F5), AppConstants.routeSettings),
+      _ToolItem(Icons.storage_rounded, 'Database', 'Manage data', const Color(0xFF00E096), const Color(0xFF00A878), AppConstants.routeDatabase),
+    ];
+    return GridView.count(
+      crossAxisCount: 2,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 1.55,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      children: tools.map((t) => _buildToolCard2(context, t)).toList(),
+    );
+  }
+
+  Widget _buildToolCard2(BuildContext context, _ToolItem t) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, t.route),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1B2A49),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: t.c1.withValues(alpha: 0.35),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: t.c1.withValues(alpha: 0.18),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [t.c1, t.c2],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: t.c1.withValues(alpha: 0.4),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Icon(t.icon, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    t.title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    t.subtitle,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF8B9BB4),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: t.c1, size: 18),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildHeaderSection() {
-    return GlassContainer(
-      padding: const EdgeInsets.all(18),
-      glowColor: AppConstants.primaryDark,
+    final now = DateTime.now();
+    final greeting = now.hour < 12 ? 'Good Morning' : now.hour < 17 ? 'Good Afternoon' : 'Good Evening';
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1B2A49), Color(0xFF243354)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6C63FF).withValues(alpha: 0.2),
+            blurRadius: 24,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFF00C2FF),
-                  Color(0xFF2962FF),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: AppConstants.accentColor.withAlpha(90),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.face_retouching_natural,
-              color: Color(0xFF031A22),
-              size: 32,
-            ),
-          ),
-          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Smart Attendance',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppConstants.textPrimary,
-                    letterSpacing: 0.45,
+                  greeting,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF00D4FF),
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'Premium Glass • Real-time Face Recognition',
+                const Text(
+                  'AI Face Attendance',
                   style: TextStyle(
-                    fontSize: 14,
-                    color: AppConstants.textSecondary,
-                    height: 1.3,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 0.2,
                   ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00E096).withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: const Color(0xFF00E096).withValues(alpha: 0.5)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.circle, color: Color(0xFF00E096), size: 7),
+                          SizedBox(width: 4),
+                          Text('Offline Ready', style: TextStyle(fontSize: 10, color: Color(0xFF00E096), fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6C63FF), Color(0xFF00D4FF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6C63FF).withValues(alpha: 0.5),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.face_retouching_natural, color: Colors.white, size: 32),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDashboardGrid(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.03,
-      children: [
-        _buildHexagonalCard(
-          context,
-          icon: Icons.person_add,
-          title: 'Enroll\nStudents',
-          subtitle: 'Add faces',
-          gradient: AppConstants.blueGradient,
-          route: AppConstants.routeEnroll,
-        ),
-
-        _buildHexagonalCard(
-          context,
-          icon: Icons.camera_alt,
-          title: 'Take\nAttendance',
-          subtitle: 'Scan faces',
-          gradient: const LinearGradient(
-            colors: [Color(0xFF00E5FF), Color(0xFF00C853)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          route: AppConstants.routeAttendance,
-        ),
-
-        _buildCircularCard(
-          context,
-          icon: Icons.mood,
-          title: 'Expression\nDetection',
-          subtitle: 'Detect emotions',
-          color: const Color(0xFFFFC107),
-          route: AppConstants.routeExpressionDetection,
-        ),
-
-        _buildCircularCard(
-          context,
-          icon: Icons.download_rounded,
-          title: 'Export',
-          subtitle: 'Reports',
-          color: const Color(0xFF00C2FF),
-          route: AppConstants.routeExport,
-        ),
-
-        _buildCircularCard(
-          context,
-          icon: Icons.tune,
-          title: 'Settings',
-          subtitle: 'Configure',
-          color: const Color(0xFF2962FF),
-          route: AppConstants.routeSettings,
-        ),
-
-        _buildCircularCard(
-          context,
-          icon: Icons.storage,
-          title: 'Database',
-          subtitle: 'Manage students',
-          color: const Color(0xFF00D09C),
-          route: AppConstants.routeDatabase,
-        ),
-      ],
-    );
-  }
+  // _buildDashboardGrid replaced by _buildFeaturedRow + _buildToolsGrid above
 
   Widget _buildQuickToolsSection(BuildContext context) {
     return Padding(
@@ -539,234 +763,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBottomStatsBar() {
-    return GlassContainer(
-      margin: EdgeInsets.zero,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: RepaintBoundary(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildStatItem(
-              icon: Icons.people,
-              value: _totalStudents.toString(),
-              label: 'Students',
-              color: AppConstants.primaryLight,
-            ),
-            _buildStatItem(
-              icon: Icons.check_circle,
-              value: _presentToday.toString(),
-              label: 'Present Today',
-              color: AppConstants.primaryColor,
-            ),
-            _buildStatItem(
-              icon: Icons.schedule,
-              value: _totalSessions.toString(),
-              label: 'Sessions',
-              color: AppConstants.accentColor,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // _buildBottomStatsBar / _buildStatItem replaced by _buildStatsRow / _buildStatChip above
 
-  Widget _buildStatItem({
-    required IconData icon,
-    required String value,
-    required String label,
-    required Color color,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withAlpha(20),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: AppConstants.textPrimary,
-          ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 10,
-            color: AppConstants.textSecondary,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHexagonalCard(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required LinearGradient gradient,
-    required String route,
-  }) {
-    return InkWell(
-      onTap: () => Navigator.pushNamed(context, route),
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: gradient,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(32),
-            topRight: Radius.circular(16),
-            bottomLeft: Radius.circular(20),
-            bottomRight: Radius.circular(30),
-          ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.24), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: gradient.colors.last.withValues(alpha: 0.28),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(11),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.22),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: Colors.white, size: 24),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withAlpha(220),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCircularCard(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required String route,
-  }) {
-    return InkWell(
-      onTap: () => Navigator.pushNamed(context, route),
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppConstants.cardColor.withValues(alpha: 0.98),
-              AppConstants.secondaryColor.withValues(alpha: 0.88),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 14,
-              spreadRadius: -4,
-              offset: const Offset(0, 4),
-            ),
-            BoxShadow(
-              color: color.withValues(alpha: 0.14),
-              blurRadius: 16,
-              spreadRadius: -4,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(11),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      color.withValues(alpha: 0.32),
-                      color.withValues(alpha: 0.12),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.35),
-                      blurRadius: 14,
-                      spreadRadius: -2,
-                    ),
-                  ],
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppConstants.primaryLight,
-                  letterSpacing: 0.2,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: AppConstants.textSecondary.withValues(alpha: 0.95),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // _buildHexagonalCard / _buildCircularCard removed — replaced by _buildFeaturedCard / _buildToolCard2
 
   Widget _buildFeatureHighlightCard() {
     return Container(
@@ -825,4 +824,17 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+// ────────────────────────────────────────────────────────────
+// Helper data class for tools grid
+// ────────────────────────────────────────────────────────────
+class _ToolItem {
+  const _ToolItem(this.icon, this.title, this.subtitle, this.c1, this.c2, this.route);
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color c1;
+  final Color c2;
+  final String route;
 }

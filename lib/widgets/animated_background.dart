@@ -42,11 +42,11 @@ class _AnimatedBackgroundState extends State<AnimatedBackground>
             gradient: LinearGradient(
               begin: Alignment(-1.0 + t * 0.6, -1.0),
               end: Alignment(1.0 - t * 0.6, 1.0),
-              colors: [
-                AppConstants.backgroundColor,
-                AppConstants.secondaryColor,
-                AppConstants.surfaceColor,
-                AppConstants.backgroundColor,
+              colors: const [
+                Color(0xFF0D1B2A),
+                Color(0xFF1B2A49),
+                Color(0xFF0F2040),
+                Color(0xFF0D1B2A),
               ],
               stops: [0.0, 0.3 + t * 0.1, 0.7 - t * 0.1, 1.0],
             ),
