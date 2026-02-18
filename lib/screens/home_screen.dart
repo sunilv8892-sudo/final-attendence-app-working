@@ -168,8 +168,8 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [
-                  Color(0xFF38BDF8),
-                  Color(0xFF22D3EE),
+                  Color(0xFFFF4081),
+                  Color(0xFF7C4DFF),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -242,7 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
           title: 'Take\nAttendance',
           subtitle: 'Scan faces',
           gradient: const LinearGradient(
-            colors: [Color(0xFF0EA5E9), Color(0xFF22D3EE)],
+            colors: [Color(0xFF00E5FF), Color(0xFF00C853)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -254,7 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.mood,
           title: 'Expression\nDetection',
           subtitle: 'Detect emotions',
-          color: const Color(0xFF7DD3FC),
+          color: const Color(0xFFFFC107),
           route: AppConstants.routeExpressionDetection,
         ),
 
@@ -263,7 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.download_rounded,
           title: 'Export',
           subtitle: 'Reports',
-          color: const Color(0xFF22D3EE),
+          color: const Color(0xFF00E5FF),
           route: AppConstants.routeExport,
         ),
 
@@ -272,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.tune,
           title: 'Settings',
           subtitle: 'Configure',
-          color: const Color(0xFF38BDF8),
+          color: const Color(0xFFFF4081),
           route: AppConstants.routeSettings,
         ),
 
@@ -281,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.storage,
           title: 'Database',
           subtitle: 'Manage students',
-          color: const Color(0xFF60A5FA),
+          color: const Color(0xFF7C4DFF),
           route: AppConstants.routeDatabase,
         ),
       ],
