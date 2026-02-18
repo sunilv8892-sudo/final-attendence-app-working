@@ -8,15 +8,15 @@ class AppConstants {
   static const String subtitle =
       'Offline Mobile Face Recognition Attendance System Using Face Embedding and Similarity Matching';
 
-  // Colors - Silver / Black Glass Theme
-  static const Color primaryColor = Color(0xFFC0C7D1);      // Silver
-  static const Color primaryDark = Color(0xFF8B95A5);       // Steel
-  static const Color primaryLight = Color(0xFFE5EAF0);      // Light Silver
-  static const Color accentColor = Color(0xFFB0BEC5);       // Cool Silver
-  static const Color accentDark = Color(0xFF78909C);        // Slate Silver
+  // Colors - Chrome Silver / Teal / Electric Blue
+  static const Color primaryColor = Color(0xFFD9E2EC);      // Chrome Silver
+  static const Color primaryDark = Color(0xFFB8C6D6);       // Steel Silver
+  static const Color primaryLight = Color(0xFFF7FAFC);      // Soft White
+  static const Color accentColor = Color(0xFF4ECDC4);       // Electric Blue
+  static const Color accentDark = Color(0xFF2EA89F);        // Deep Electric Blue
   
-  static const Color secondaryColor = Color(0xFF0B0D10);    // Carbon Black
-  static const Color surfaceColor = Color(0xFF11161B);      // Dark Surface
+  static const Color secondaryColor = Color(0xFF1A535C);    // Deep Sea Teal
+  static const Color surfaceColor = Color(0xFF132F35);      // Teal Surface
   
   static const Color successColor = Color(0xFF10B981);      // Emerald
   static const Color successLight = Color(0xFF34D399);      // Light Emerald
@@ -24,15 +24,15 @@ class AppConstants {
   static const Color errorColor = Color(0xFFEF4444);        // Red
   static const Color errorLight = Color(0xFFF87171);        // Light Red
   
-  static const Color backgroundColor = Color(0xFF050607);   // Pure Dark
-  static const Color cardColor = Color(0xFF101317);         // Glass Card Surface
+  static const Color backgroundColor = Color(0xFF07151A);   // Deep Teal Night
+  static const Color cardColor = Color(0xFF0F2329);         // Glass Card Surface
   static const Color cardBorder = Color(0x33FFFFFF);         // Glass Border
   
-  static const Color textPrimary = Color(0xFFF8FAFC);       // Near White
-  static const Color textSecondary = Color(0xFFB0BAC8);     // Silver Gray
-  static const Color textTertiary = Color(0xFF7C8798);      // Muted Slate
+  static const Color textPrimary = Color(0xFFF8FBFF);       // Soft White
+  static const Color textSecondary = Color(0xFFC3D3E0);     // Silver Mist
+  static const Color textTertiary = Color(0xFF8FA6B8);      // Muted Steel
   
-  static const Color inputFill = Color(0xFF171C22);         // Dark Input Glass
+  static const Color inputFill = Color(0xFF14313A);         // Dark Teal Input
   static const Color inputBorder = Color(0x33FFFFFF);       // Glass Border
   
   static const Color dividerColor = Color(0x1AFFFFFF);      // White 10%
@@ -41,9 +41,9 @@ class AppConstants {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF050607),
-      Color(0xFF0B0D10),
-      Color(0xFF14181D),
+      Color(0xFF07151A),
+      Color(0xFF1A535C),
+      Color(0xFF102A31),
     ],
   );
   
@@ -51,9 +51,9 @@ class AppConstants {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF2A2F36),
-      Color(0xFF3A424D),
-      Color(0xFF1E232A),
+      Color(0xFFD9E2EC),
+      Color(0xFF9FB5C9),
+      Color(0xFF4ECDC4),
     ],
   );
   
@@ -61,8 +61,8 @@ class AppConstants {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFFD1D5DB),
-      Color(0xFF9CA3AF),
+      Color(0xFF4ECDC4),
+      Color(0xFF1A535C),
     ],
   );
 
@@ -91,7 +91,7 @@ class AppConstants {
   );
   
   static const BoxShadow buttonShadow = BoxShadow(
-    color: Color(0x40B0BEC5),
+    color: Color(0x404ECDC4),
     blurRadius: 20.0,
     offset: Offset(0, 8),
   );
@@ -154,14 +154,12 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppConstants.primaryColor,
-          foregroundColor: Colors.white,
+          backgroundColor: AppConstants.accentColor,
+          foregroundColor: AppConstants.secondaryColor,
           elevation: 4,
           shadowColor: AppConstants.buttonShadow.color,
           minimumSize: const Size(double.infinity, AppConstants.buttonHeight),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
-          ),
+          shape: const StadiumBorder(),
           textStyle: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
@@ -170,12 +168,10 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppConstants.primaryColor,
-          side: const BorderSide(color: AppConstants.primaryColor, width: 2),
+          foregroundColor: AppConstants.primaryLight,
+          side: const BorderSide(color: AppConstants.primaryColor, width: 1.5),
           minimumSize: const Size(double.infinity, AppConstants.buttonHeight),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
-          ),
+          shape: const StadiumBorder(),
           textStyle: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
