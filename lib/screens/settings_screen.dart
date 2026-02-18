@@ -17,14 +17,14 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  int _similarityIndex = 0; // 0=Low, 1=Medium, 2=High, 3=Ultra
-  final List<String> _modes = ['Low', 'Medium', 'High', 'Ultra'];
+  int _similarityIndex = 0; // Default to Low (0.75)
+  final List<String> _modes = ['Low', 'Default', 'Balanced', 'High'];
   final List<double> _thresholds = [0.75, 0.80, 0.85, 0.90];
   final List<String> _descriptions = [
-    'More lenient — fewer missed faces, may accept similar-looking people',
-    'Balanced — good accuracy for most lighting and environments',
-    'Strict — high confidence required, fewer false positives',
-    'Ultra strict — very high confidence, may miss some detections',
+    'Low — easiest detection, can match quicker in class conditions',
+    'Default — good day-to-day balance of speed and accuracy',
+    'Balanced — stricter confidence with better identity separation',
+    'High — strict matching, may miss some valid faces',
   ];
 
   // Real stats
@@ -48,15 +48,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Load threshold
     final savedThreshold = prefs.getDouble('similarity_threshold');
     if (savedThreshold != null) {
-      if (savedThreshold == 0.75) {
-        _similarityIndex = 0;
-      } else if (savedThreshold == 0.80) {
-        _similarityIndex = 1;
-      } else if (savedThreshold == 0.85) {
-        _similarityIndex = 2;
-      } else if (savedThreshold == 0.90) {
+      if (savedThreshold >= 0.90) {
         _similarityIndex = 3;
+      } else if (savedThreshold >= 0.85) {
+        _similarityIndex = 2;
+      } else if (savedThreshold >= 0.80) {
+        _similarityIndex = 1;
+      } else {
+        _similarityIndex = 0;
       }
+    } else {
+      await prefs.setDouble('similarity_threshold', _thresholds[_similarityIndex]);
     }
 
     // Load TTS preference

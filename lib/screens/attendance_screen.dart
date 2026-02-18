@@ -51,10 +51,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   bool _isScanning = false;
   final Map<int, AttendanceStatus> _attendanceStatus = {};
   DateTime? _attendanceDate;
-  double _similarityThreshold = 0.75; // Default to Low threshold
+  double _similarityThreshold = 0.75;
   final Map<int, DateTime> _lastDetectionTime =
       {}; // Prevent duplicate detections
-  static const Duration _detectionCooldown = Duration(seconds: 2);
+  static const Duration _detectionCooldown = Duration(seconds: 1);
 
   // Per-student consecutive detection tracking (supports multiple faces)
   final Map<int, int> _consecutiveDetectionsMap = {};
@@ -92,7 +92,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     try {
       // Load similarity threshold from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
-      _similarityThreshold = prefs.getDouble('similarity_threshold') ?? 0.75;
+      final savedThreshold = prefs.getDouble('similarity_threshold');
+      _similarityThreshold =
+          (savedThreshold ?? 0.75).clamp(0.50, 1.0).toDouble();
+      if (savedThreshold == null) {
+        await prefs.setDouble('similarity_threshold', _similarityThreshold);
+      }
       debugPrint('📊 Loaded similarity threshold: $_similarityThreshold');
 
       _dbManager = DatabaseManager();
@@ -172,11 +177,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       _currentCamera = camera;
       _controller = CameraController(
         camera,
-        ResolutionPreset.medium,
+        ResolutionPreset.low,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
       await _controller!.initialize();
+      await _controller!.setFlashMode(FlashMode.off);
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('Init camera error: $e');
@@ -204,18 +210,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
     try {
       final image = await _controller!.takePicture();
+      // Detect faces directly from captured file path (avoids temp-file rewrite overhead)
+      final detections = await _detectFaceWithMlKitPath(image.path);
+      if (detections.isEmpty) {
+        debugPrint('❌ No face detected');
+        return;
+      }
+
+      // Decode image only when detection succeeds
       final bytes = await image.readAsBytes();
       final rawImage = img.decodeImage(bytes);
-
       if (rawImage != null) {
         debugPrint('📸 Scanning face: ${rawImage.width}x${rawImage.height}');
-
-        // Detect faces
-        final detections = await _detectFaceWithMlKit(bytes);
-        if (detections.isEmpty) {
-          debugPrint('❌ No face detected');
-          return;
-        }
 
         _imageSize = Size(
           rawImage.width.toDouble(),
@@ -237,6 +243,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _overlayNames.clear();
         _overlayColors.clear();
         _overlayExpressions.clear();
+        final seenInCurrentScan = <int>{};
+        final countedInCurrentScan = <int>{};
 
         // Process each valid face
         for (final face in validFaces) {
@@ -258,6 +266,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           final match = _findMatchingStudent(embedding);
           if (match != null) {
             final studentId = match.id!;
+            seenInCurrentScan.add(studentId);
 
             // For single-face: reset counters if identity changes between frames
             if (validFaces.length == 1) {
@@ -268,9 +277,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               _lastSingleFaceMatchId = studentId;
             }
 
-            // Track consecutive detections per student
-            _consecutiveDetectionsMap[studentId] =
-                (_consecutiveDetectionsMap[studentId] ?? 0) + 1;
+            // Track consecutive detections per student (max 1 increment per scan)
+            if (countedInCurrentScan.add(studentId)) {
+              _consecutiveDetectionsMap[studentId] =
+                  (_consecutiveDetectionsMap[studentId] ?? 0) + 1;
+            }
 
             // If we have enough consecutive detections, check cooldown
             if (_consecutiveDetectionsMap[studentId]! >=
@@ -327,6 +338,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           }
         }
 
+        // Strict consecutive rule: if a student is not seen in this scan, reset their counter
+        _consecutiveDetectionsMap.removeWhere(
+          (studentId, _) => !seenInCurrentScan.contains(studentId),
+        );
+
         // Set overlay timer to clear after 2 seconds
         _overlayTimer?.cancel();
         _overlayTimer = Timer(const Duration(seconds: 2), () {
@@ -345,7 +361,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     } catch (e) {
       debugPrint('Scan error: $e');
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      _isProcessing = false;
     }
   }
 
@@ -359,7 +375,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         if (!_isProcessing) {
           await _scanFace();
         }
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future.delayed(const Duration(milliseconds: 300));
       }
     } finally {
       _isScanning = false;
@@ -391,6 +407,27 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           .toList();
     } catch (e) {
       debugPrint('Face detection error: $e');
+      return [];
+    }
+  }
+
+  Future<List<DetectedFace>> _detectFaceWithMlKitPath(String imagePath) async {
+    try {
+      final faces = await _faceDetector.detectFacesFromPath(imagePath);
+      return faces
+          .map(
+            (face) => DetectedFace(
+              x: face.boundingBox.left.toDouble(),
+              y: face.boundingBox.top.toDouble(),
+              width: face.boundingBox.width.toDouble(),
+              height: face.boundingBox.height.toDouble(),
+              confidence: 1.0,
+              expression: face.expression,
+            ),
+          )
+          .toList();
+    } catch (e) {
+      debugPrint('Face detection path error: $e');
       return [];
     }
   }
@@ -463,9 +500,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       return null;
     }
 
-    // Reject ambiguous matches: best must be sufficiently better than 2nd best
-    const double requiredMargin = 0.04;
-    if (sorted.length > 1 && margin < requiredMargin) {
+    // Dynamic ambiguity control: keep strictness at high thresholds, relax at low thresholds.
+    final double requiredMargin = _similarityThreshold <= 0.75
+        ? 0.005
+        : _similarityThreshold <= 0.80
+            ? 0.010
+            : _similarityThreshold <= 0.85
+                ? 0.020
+                : 0.030;
+
+    // Strong confidence override: if top score is clearly above threshold, allow match.
+    final bool isStrongMatch = bestSim >= (_similarityThreshold + 0.05);
+
+    if (!isStrongMatch && sorted.length > 1 && margin < requiredMargin) {
       final secondStudent = _enrolledStudents.firstWhere((s) => s.id == sorted[1].key);
       debugPrint(
         '⚠️ AMBIGUOUS: ${bestStudent.name} (${bestSim.toStringAsFixed(3)}) vs ${secondStudent.name} (${secondBestSim.toStringAsFixed(3)}) — margin ${margin.toStringAsFixed(3)} < $requiredMargin',
