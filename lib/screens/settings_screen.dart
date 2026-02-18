@@ -862,7 +862,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } else if (_similarityIndex == 2) {
       indicatorColor = AppConstants.errorColor;
     } else {
-      indicatorColor = const Color(0xFF9C27B0); // Purple for Ultra
+      indicatorColor = AppConstants.primaryColor;
     }
 
     return Card(
@@ -893,7 +893,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 } else if (index == 2) {
                   color = AppConstants.errorColor;
                 } else {
-                  color = const Color(0xFF9C27B0); // Purple for Ultra
+                  color = AppConstants.primaryColor;
                 }
 
                 return Expanded(
