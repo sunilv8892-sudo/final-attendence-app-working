@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:screen_brightness/screen_brightness.dart';
 import '../database/database_manager.dart';
 import '../models/face_detection_model.dart';
 import '../models/student_model.dart';
@@ -34,6 +35,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   List<CameraDescription> _availableCameras = [];
   CameraDescription? _currentCamera;
   late DatabaseManager _dbManager;
+  bool _isBackFlashOn = false;
+  bool _isFrontLightOn = false;
+  double? _previousAppBrightness;
+  bool _isBrightnessBoostActive = false;
 
   int _capturedSamples = 0;
   final List<List<double>> _embeddings = [];
@@ -54,6 +59,12 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   final FocusNode _genderFocus = FocusNode();
   final FocusNode _ageFocus = FocusNode();
   final FocusNode _phoneFocus = FocusNode();
+  final GlobalKey _nameFieldKey = GlobalKey();
+  final GlobalKey _rollFieldKey = GlobalKey();
+  final GlobalKey _classFieldKey = GlobalKey();
+  final GlobalKey _genderFieldKey = GlobalKey();
+  final GlobalKey _ageFieldKey = GlobalKey();
+  final GlobalKey _phoneFieldKey = GlobalKey();
   final List<String> _genders = ['Male', 'Female', 'Other'];
   int _genderIndex = 0;
 
@@ -66,6 +77,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
   @override
   void dispose() {
+    _disableBrightnessBoost();
     _controller?.dispose();
     _faceEmbedder.dispose();
     _faceDetector.dispose();
@@ -149,11 +161,15 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       await _controller?.dispose();
       _controller = CameraController(
         camera,
-        ResolutionPreset.medium,
+        ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
       await _controller!.initialize();
+      await _controller!.setFlashMode(FlashMode.off);
+      _isBackFlashOn = false;
+      _isFrontLightOn = false;
+      await _disableBrightnessBoost();
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('Init camera error: $e');
@@ -166,6 +182,76 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     final nextIndex = (currentIndex + 1) % _availableCameras.length;
     final nextCamera = _availableCameras[nextIndex];
     await _initCameraFor(nextCamera);
+  }
+
+  bool get _isFrontCamera =>
+      _currentCamera?.lensDirection == CameraLensDirection.front;
+
+  Future<void> _enableBrightnessBoost() async {
+    if (_isBrightnessBoostActive) return;
+    try {
+      _previousAppBrightness = await ScreenBrightness.instance.application;
+      await ScreenBrightness.instance.setApplicationScreenBrightness(1.0);
+      _isBrightnessBoostActive = true;
+    } catch (e) {
+      debugPrint('Brightness enable error: $e');
+    }
+  }
+
+  Future<void> _disableBrightnessBoost() async {
+    if (!_isBrightnessBoostActive) return;
+    try {
+      if (_previousAppBrightness != null) {
+        await ScreenBrightness.instance.setApplicationScreenBrightness(
+          _previousAppBrightness!,
+        );
+      } else {
+        await ScreenBrightness.instance.resetApplicationScreenBrightness();
+      }
+    } catch (e) {
+      debugPrint('Brightness restore error: $e');
+    } finally {
+      _isBrightnessBoostActive = false;
+      _previousAppBrightness = null;
+    }
+  }
+
+  Future<void> _toggleCameraLight() async {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+
+    if (_isFrontCamera) {
+      final nextFrontLightState = !_isFrontLightOn;
+      if (nextFrontLightState) {
+        await _enableBrightnessBoost();
+      } else {
+        await _disableBrightnessBoost();
+      }
+      if (mounted) {
+        setState(() {
+          _isFrontLightOn = nextFrontLightState;
+        });
+      }
+      return;
+    }
+
+    final nextFlashState = !_isBackFlashOn;
+    try {
+      await _controller!.setFlashMode(
+        nextFlashState ? FlashMode.torch : FlashMode.off,
+      );
+      if (mounted) {
+        setState(() {
+          _isBackFlashOn = nextFlashState;
+        });
+      }
+    } catch (e) {
+      debugPrint('Flash mode error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Flash is not supported on this camera')),
+        );
+      }
+    }
   }
 
   Future<void> _captureFaceSample() async {
@@ -262,7 +348,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
             setState(() => _capturedSamples++);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('✅ Sample $_capturedSamples captured (${embedding.length}D)'),
+                content: Text('✅ Sample $_capturedSamples captured'),
                 duration: const Duration(milliseconds: 500),
                 backgroundColor: AppConstants.primaryColor,
               ),
@@ -317,6 +403,14 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _focusAndScrollTo(FocusNode? nextFocus, GlobalKey fieldKey) async {
+    if (nextFocus != null) {
+      FocusScope.of(context).requestFocus(nextFocus);
+    } else {
+      FocusScope.of(context).unfocus();
+    }
+  }
+
   Future<List<DetectedFace>> _detectFaceWithMlKit(Uint8List imageBytes) async {
     try {
       final faces = await _faceDetector.detectFaces(imageBytes);
@@ -353,7 +447,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     try {
       debugPrint('🔄 Generating embedding from face ${faceImage.width}x${faceImage.height}');
       // Convert to bytes for the embedding module
-      final faceBytes = Uint8List.fromList(img.encodeJpg(faceImage));
+      final faceBytes = Uint8List.fromList(
+        img.encodeJpg(faceImage, quality: 100),
+      );
       debugPrint('   Encoded to ${faceBytes.length} bytes');
       final embedding = await _faceEmbedder.generateEmbedding(faceBytes);
       if (embedding == null) {
@@ -459,6 +555,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('✅ Student enrolled successfully!')),
         );
+        _stopAutoCapture();
         _nameController.clear();
         _rollController.clear();
         _classController.clear();
@@ -491,464 +588,460 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       focusNode: _focusNode,
       autofocus: true,
       onKeyEvent: _handleKeyEvent,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Enroll Student'),
-          flexibleSpace: Container(
-            decoration: BoxDecoration(gradient: AppConstants.blueGradient),
-          ),
-          actions: [
-            Tooltip(
-                  message: 'F5: Capture  F6: Down  F7: Save  F8: Options',
-              child: IconButton(
-                icon: const Icon(Icons.keyboard, size: 20),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('F5: Start Capture · F6: Scroll Down · F7: Save Student · F8: Enrollment Options'),
-                          duration: Duration(seconds: 3),
-                        ),
-                  );
-                },
-              ),
+      child: WillPopScope(
+        onWillPop: () async {
+          if (_autoCapturing) {
+            _stopAutoCapture();
+          }
+          return true;
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Enroll Student'),
+            flexibleSpace: Container(
+              decoration: BoxDecoration(gradient: AppConstants.blueGradient),
             ),
-          ],
-        ),
-        body: AnimatedBackground(
-          child: SingleChildScrollView(
-            controller: _scrollController,
-          padding: const EdgeInsets.all(AppConstants.paddingMedium),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Student Information Card
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppConstants.paddingLarge),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppConstants.primaryColor.withAlpha(26),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              Icons.person_add,
-                              color: AppConstants.primaryColor,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: AppConstants.paddingMedium),
-                          const Text(
-                            'Student Information',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppConstants.paddingLarge),
-                      TextField(
-                        controller: _nameController,
-                        focusNode: _nameFocus,
-                        textInputAction: TextInputAction.next,
-                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
-                        decoration: InputDecoration(
-                          labelText: 'Full Name',
-                          hintText: 'Enter student name',
-                          prefixIcon: const Icon(Icons.person_outline),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppConstants.paddingMedium),
-                      TextField(
-                        controller: _rollController,
-                        focusNode: _rollFocus,
-                        textInputAction: TextInputAction.next,
-                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
-                        decoration: InputDecoration(
-                          labelText: 'Roll Number',
-                          hintText: 'e.g., 21CS01',
-                          prefixIcon: const Icon(Icons.numbers),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppConstants.paddingMedium),
-                      TextField(
-                        controller: _classController,
-                        focusNode: _classFocus,
-                        textInputAction: TextInputAction.next,
-                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
-                        decoration: InputDecoration(
-                          labelText: 'Class/Section',
-                          hintText: 'e.g., CSE-A',
-                          prefixIcon: const Icon(Icons.school),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppConstants.paddingMedium),
-                      // Keyboard-aware gender selection: arrow up/down changes selection, Enter moves focus
-                      DropdownButtonFormField<String>(
-                        value: _selectedGender,
-                        focusNode: _genderFocus,
-                        decoration: InputDecoration(
-                          labelText: 'Gender',
-                          prefixIcon: const Icon(Icons.wc),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
-                            ),
-                          ),
-                        ),
-                        items: _genders.map((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
-                        onChanged: (String? newValue) {
-                          if (newValue == null) return;
-                          setState(() {
-                            _selectedGender = newValue;
-                            _genderIndex = _genders.indexOf(newValue);
-                          });
-                          // Move focus to next field after dropdown closes (post-frame)
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            FocusScope.of(context).nextFocus();
-                          });
-                        },
-                      ),
-                      const SizedBox(height: AppConstants.paddingMedium),
-                      TextField(
-                        controller: _ageController,
-                        focusNode: _ageFocus,
-                        textInputAction: TextInputAction.next,
-                        onSubmitted: (_) => FocusScope.of(context).nextFocus(),
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'Age',
-                          hintText: 'e.g., 20',
-                          prefixIcon: const Icon(Icons.calendar_today),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppConstants.paddingMedium),
-                      TextField(
-                        controller: _phoneController,
-                        focusNode: _phoneFocus,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
-                        keyboardType: TextInputType.phone,
-                        decoration: InputDecoration(
-                          labelText: 'Phone Number',
-                          hintText: 'e.g., +1234567890',
-                          prefixIcon: const Icon(Icons.phone),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.borderRadius,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+          ),
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: AppConstants.secondaryColor,
+              border: Border(top: BorderSide(color: AppConstants.cardBorder)),
+            ),
+            padding: EdgeInsets.fromLTRB(
+              AppConstants.paddingMedium,
+              AppConstants.paddingSmall,
+              AppConstants.paddingMedium,
+              AppConstants.paddingSmall + MediaQuery.of(context).padding.bottom,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: canCapture && !_autoCapturing
+                        ? _startAutoCapture
+                        : (_autoCapturing ? _stopAutoCapture : null),
+                    icon: Icon(_autoCapturing ? Icons.stop_circle : Icons.videocam),
+                    label: Text(
+                      _autoCapturing ? 'Stop Capture' : 'Start Capture',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
-              ),
-
-              const SizedBox(height: AppConstants.paddingLarge),
-
-              // Camera Preview Section
-              Center(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
-                    border: Border.all(color: AppConstants.cardBorder, width: 2),
+                const SizedBox(width: AppConstants.paddingMedium),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _capturedSamples >= AppConstants.requiredEnrollmentSamples &&
+                            _embedderReady
+                        ? _saveStudent
+                        : null,
+                    icon: const Icon(Icons.check_circle),
+                    label: const Text(
+                      'Save Student',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
-                  constraints: const BoxConstraints(
-                    maxWidth: 500,
-                    maxHeight: 450,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
-                    child: Container(
-                      color: AppConstants.secondaryColor,
-                      child: !isReady
-                        ? const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                ),
+              ],
+            ),
+          ),
+          body: AnimatedBackground(
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(AppConstants.paddingMedium),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                  final cameraHeight =
+                    (constraints.maxHeight * 0.48).clamp(240.0, 360.0);
+
+                    Widget cameraSection = Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 500),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(
+                              AppConstants.borderRadiusLarge,
+                            ),
+                            border: Border.all(
+                              color: AppConstants.cardBorder,
+                              width: 2,
+                            ),
+                            boxShadow: [AppConstants.cardShadow],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(
+                              AppConstants.borderRadiusLarge,
+                            ),
+                            child: Container(
+                              color: AppConstants.secondaryColor,
+                              child: !isReady
+                                  ? const Center(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          CircularProgressIndicator(),
+                                          SizedBox(
+                                            height: AppConstants.paddingMedium,
+                                          ),
+                                          Text(
+                                            'Initializing Camera...',
+                                            style: TextStyle(
+                                              color: AppConstants.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        RepaintBoundary(
+                                          child: FittedBox(
+                                            fit: BoxFit.cover,
+                                            clipBehavior: Clip.hardEdge,
+                                            child: SizedBox(
+                                              width:
+                                                  _controller!
+                                                      .value
+                                                      .previewSize
+                                                      ?.height ??
+                                                  1,
+                                              height:
+                                                  _controller!
+                                                      .value
+                                                      .previewSize
+                                                      ?.width ??
+                                                  1,
+                                              child: CameraPreview(_controller!),
+                                            ),
+                                          ),
+                                        ),
+                                        if (_isFrontCamera && _isFrontLightOn)
+                                          IgnorePointer(
+                                            child: CustomPaint(
+                                              painter:
+                                                  _CenterOvalFlashMaskPainter(),
+                                              child: const SizedBox.expand(),
+                                            ),
+                                          ),
+                                        if (_availableCameras.length > 1)
+                                          Positioned(
+                                            left: 12,
+                                            top: 12,
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withAlpha(
+                                                  153,
+                                                ),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: IconButton(
+                                                onPressed: _switchCamera,
+                                                icon: const Icon(
+                                                  Icons.cameraswitch,
+                                                  color: Colors.white,
+                                                  size: 24,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        Positioned(
+                                          left: 12,
+                                          top: 72,
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withAlpha(
+                                                153,
+                                              ),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: IconButton(
+                                              onPressed: _toggleCameraLight,
+                                              icon: Icon(
+                                                _isFrontCamera
+                                                    ? (_isFrontLightOn
+                                                          ? Icons.wb_sunny
+                                                          : Icons.wb_sunny_outlined)
+                                                    : (_isBackFlashOn
+                                                          ? Icons.flash_on
+                                                          : Icons.flash_off),
+                                                color: Colors.white,
+                                                size: 24,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+
+                    Widget detailsSection = Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppConstants.paddingSmall),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                CircularProgressIndicator(),
-                                SizedBox(height: AppConstants.paddingMedium),
-                                Text(
-                                  'Initializing Camera...',
+                                const Text(
+                                  'Enrollment Progress',
                                   style: TextStyle(
-                                    color: AppConstants.textSecondary,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  '$_capturedSamples/${AppConstants.requiredEnrollmentSamples}',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppConstants.primaryColor,
                                   ),
                                 ),
                               ],
                             ),
-                          )
-                        : Stack(
-                            children: [
-                              CameraPreview(_controller!),
-                              // Camera Switch Button
-                              if (_availableCameras.length > 1)
-                                Positioned(
-                                  right: 12,
-                                  top: 12,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withAlpha(153),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: IconButton(
-                                      onPressed: _switchCamera,
-                                      icon: const Icon(
-                                        Icons.cameraswitch,
-                                        color: Colors.white,
-                                        size: 24,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              // Status Indicator
-                              Positioned(
-                                bottom: 12,
-                                left: 12,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withAlpha(153),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: const BoxDecoration(
-                                          color: AppConstants.successColor,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      const Text(
-                                        'Camera Ready',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ),
-              ),
-              ),
-
-              const SizedBox(height: AppConstants.paddingLarge),
-
-              // Progress Section
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppConstants.paddingLarge),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Enrollment Progress',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppConstants.primaryColor.withAlpha(26),
+                            const SizedBox(height: AppConstants.paddingSmall),
+                            ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '$_capturedSamples/${AppConstants.requiredEnrollmentSamples}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppConstants.primaryColor,
-                                fontSize: 14,
+                              child: LinearProgressIndicator(
+                                value:
+                                    _capturedSamples /
+                                    AppConstants.requiredEnrollmentSamples,
+                                minHeight: 8,
+                                backgroundColor: AppConstants.inputFill,
+                                valueColor: AlwaysStoppedAnimation(
+                                  _capturedSamples >=
+                                          AppConstants.requiredEnrollmentSamples
+                                      ? AppConstants.successColor
+                                      : AppConstants.primaryColor,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppConstants.paddingMedium),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: LinearProgressIndicator(
-                          value: _capturedSamples /
-                              AppConstants.requiredEnrollmentSamples,
-                          minHeight: 10,
-                          backgroundColor: AppConstants.inputFill,
-                          valueColor: AlwaysStoppedAnimation(
-                            _capturedSamples >=
-                                    AppConstants.requiredEnrollmentSamples
-                                ? AppConstants.successColor
-                                : AppConstants.primaryColor,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppConstants.paddingSmall),
-                      if (_capturedSamples <
-                          AppConstants.requiredEnrollmentSamples)
-                        Text(
-                          'Capture ${AppConstants.requiredEnrollmentSamples - _capturedSamples} more samples',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppConstants.textTertiary,
-                          ),
-                        )
-                      else
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.check_circle,
-                              color: AppConstants.successColor,
-                              size: 16,
+                            const SizedBox(height: AppConstants.paddingSmall),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    key: _nameFieldKey,
+                                    controller: _nameController,
+                                    focusNode: _nameFocus,
+                                    textInputAction: TextInputAction.next,
+                                    onSubmitted:
+                                        (_) => _focusAndScrollTo(
+                                          _rollFocus,
+                                          _rollFieldKey,
+                                        ),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Name',
+                                      prefixIcon: const Icon(
+                                        Icons.person_outline,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppConstants.borderRadius,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: AppConstants.paddingSmall),
+                                Expanded(
+                                  child: TextField(
+                                    key: _rollFieldKey,
+                                    controller: _rollController,
+                                    focusNode: _rollFocus,
+                                    textInputAction: TextInputAction.next,
+                                    onSubmitted:
+                                        (_) => _focusAndScrollTo(
+                                          _classFocus,
+                                          _classFieldKey,
+                                        ),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Roll Number',
+                                      prefixIcon: const Icon(Icons.numbers),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppConstants.borderRadius,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Ready to save!',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppConstants.successColor,
-                                fontWeight: FontWeight.w600,
+                            const SizedBox(height: AppConstants.paddingSmall),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    key: _classFieldKey,
+                                    controller: _classController,
+                                    focusNode: _classFocus,
+                                    textInputAction: TextInputAction.next,
+                                    onSubmitted:
+                                        (_) => _focusAndScrollTo(
+                                          _genderFocus,
+                                          _genderFieldKey,
+                                        ),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Class/Section',
+                                      prefixIcon: const Icon(Icons.school),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppConstants.borderRadius,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: AppConstants.paddingSmall),
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                    key: _genderFieldKey,
+                                    value: _selectedGender,
+                                    focusNode: _genderFocus,
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Gender',
+                                      prefixIcon: const Icon(Icons.wc),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppConstants.borderRadius,
+                                        ),
+                                      ),
+                                    ),
+                                    items:
+                                        _genders
+                                            .map(
+                                              (value) => DropdownMenuItem<
+                                                String
+                                              >(
+                                                value: value,
+                                                child: Text(value),
+                                              ),
+                                            )
+                                            .toList(),
+                                    onChanged: (newValue) {
+                                      if (newValue == null) return;
+                                      setState(() {
+                                        _selectedGender = newValue;
+                                        _genderIndex = _genders.indexOf(
+                                          newValue,
+                                        );
+                                      });
+                                      _focusAndScrollTo(_ageFocus, _ageFieldKey);
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppConstants.paddingSmall),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    key: _ageFieldKey,
+                                    controller: _ageController,
+                                    focusNode: _ageFocus,
+                                    textInputAction: TextInputAction.next,
+                                    keyboardType: TextInputType.number,
+                                    onSubmitted:
+                                        (_) => _focusAndScrollTo(
+                                          _phoneFocus,
+                                          _phoneFieldKey,
+                                        ),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Age',
+                                      prefixIcon: const Icon(
+                                        Icons.calendar_today,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppConstants.borderRadius,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: AppConstants.paddingSmall),
+                                Expanded(
+                                  child: TextField(
+                                    key: _phoneFieldKey,
+                                    controller: _phoneController,
+                                    focusNode: _phoneFocus,
+                                    textInputAction: TextInputAction.done,
+                                    keyboardType: TextInputType.phone,
+                                    onSubmitted:
+                                        (_) => _focusAndScrollTo(
+                                          null,
+                                          _phoneFieldKey,
+                                        ),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Phone Number',
+                                      prefixIcon: const Icon(Icons.phone),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppConstants.borderRadius,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (!_embedderReady)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: AppConstants.paddingSmall,
+                                ),
+                                child: Text(
+                                  'Face embedding model unavailable. Check logs.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppConstants.errorLight,
+                                  ),
+                                ),
                               ),
-                            ),
                           ],
                         ),
-                    ],
-                  ),
-                ),
-              ),
-
-              if (!_embedderReady)
-                Padding(
-                  padding: const EdgeInsets.only(
-                    top: AppConstants.paddingMedium,
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.all(AppConstants.paddingMedium),
-                    decoration: BoxDecoration(
-                      color: AppConstants.errorColor.withAlpha(26),
-                      borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-                      border: Border.all(
-                        color: AppConstants.errorColor.withAlpha(77),
                       ),
-                    ),
-                    child: Row(
+                    );
+
+                    return Column(
                       children: [
-                        const Icon(
-                          Icons.warning,
-                          color: AppConstants.errorColor,
-                          size: 20,
-                        ),
-                        const SizedBox(width: AppConstants.paddingSmall),
-                        Expanded(
-                          child: Text(
-                            'Face embedding model unavailable. Check logs.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppConstants.errorLight,
-                              fontWeight: FontWeight.w500,
+                        SizedBox(height: cameraHeight, child: cameraSection),
+                        const SizedBox(height: AppConstants.paddingMedium),
+                        Flexible(
+                          child: SingleChildScrollView(
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 500),
+                                child: detailsSection,
+                              ),
                             ),
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                ),
-
-              const SizedBox(height: AppConstants.paddingLarge),
-
-              // Action Buttons
-              ElevatedButton.icon(
-                onPressed: canCapture && !_autoCapturing
-                    ? () => _startAutoCapture()
-                    : (_autoCapturing ? () => _stopAutoCapture() : null),
-                icon: Icon(_autoCapturing ? Icons.stop_circle : Icons.videocam),
-                label: Text(
-                  _autoCapturing ? 'Stop Capture' : 'Start Auto Capture',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    );
+                  },
                 ),
               ),
-
-              const SizedBox(height: AppConstants.paddingSmall),
-
-              ElevatedButton.icon(
-                onPressed:
-                    _capturedSamples >=
-                            AppConstants.requiredEnrollmentSamples &&
-                        _embedderReady
-                        ? _saveStudent
-                        : null,
-                icon: const Icon(Icons.check_circle),
-                label: const Text(
-                  'Save Student',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-
-              const SizedBox(height: AppConstants.paddingSmall),
-
-              OutlinedButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.arrow_back),
-                label: const Text(
-                  'Cancel',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-
-              const SizedBox(height: AppConstants.paddingLarge),
-            ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 
@@ -996,11 +1089,14 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         break;
       case LogicalKeyboardKey.f6:
         // F6: Scroll down
-        _scrollController.animateTo(
-          (_scrollController.offset + 300).clamp(0.0, _scrollController.position.maxScrollExtent),
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            (_scrollController.offset + 300)
+                .clamp(0.0, _scrollController.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
         break;
       case LogicalKeyboardKey.f7:
         // F7: Save student
@@ -1021,4 +1117,30 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         break;
     }
   }
+}
+
+class _CenterOvalFlashMaskPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+
+    final layerRect = Offset.zero & size;
+    canvas.saveLayer(layerRect, Paint());
+
+    final overlayPaint = Paint()..color = Colors.white.withAlpha(245);
+    canvas.drawRect(layerRect, overlayPaint);
+
+    final ovalRect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: size.width * 0.62,
+      height: size.height * 0.72,
+    );
+
+    final clearPaint = Paint()..blendMode = BlendMode.clear;
+    canvas.drawOval(ovalRect, clearPaint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

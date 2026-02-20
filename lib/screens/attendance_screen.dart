@@ -12,6 +12,7 @@ import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:screen_brightness/screen_brightness.dart';
 import '../database/database_manager.dart';
 import '../models/face_detection_model.dart';
 import '../models/student_model.dart';
@@ -44,6 +45,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   List<CameraDescription> _availableCameras = [];
   late CameraDescription _currentCamera;
   late DatabaseManager _dbManager;
+  bool _isBackFlashOn = false;
+  bool _isFrontLightOn = false;
+  double? _previousAppBrightness;
+  bool _isBrightnessBoostActive = false;
 
   List<Student> _enrolledStudents = [];
   final Map<int, List<List<double>>> _studentEmbeddings = {};
@@ -81,6 +86,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   @override
   void dispose() {
+    _disableBrightnessBoost();
     _controller?.dispose();
     _faceDetector.dispose();
     _faceEmbedder.dispose();
@@ -177,12 +183,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       _currentCamera = camera;
       _controller = CameraController(
         camera,
-        ResolutionPreset.low,
+        ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
       await _controller!.initialize();
       await _controller!.setFlashMode(FlashMode.off);
+      _isBackFlashOn = false;
+      _isFrontLightOn = false;
+      await _disableBrightnessBoost();
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('Init camera error: $e');
@@ -200,6 +209,76 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     _currentCamera = nextCamera;
     await _initCameraFor(nextCamera);
     debugPrint('Switched to ${nextCamera.lensDirection.toString()} camera');
+  }
+
+  bool get _isFrontCamera =>
+      _currentCamera.lensDirection == CameraLensDirection.front;
+
+  Future<void> _enableBrightnessBoost() async {
+    if (_isBrightnessBoostActive) return;
+    try {
+      _previousAppBrightness = await ScreenBrightness.instance.application;
+      await ScreenBrightness.instance.setApplicationScreenBrightness(1.0);
+      _isBrightnessBoostActive = true;
+    } catch (e) {
+      debugPrint('Brightness enable error: $e');
+    }
+  }
+
+  Future<void> _disableBrightnessBoost() async {
+    if (!_isBrightnessBoostActive) return;
+    try {
+      if (_previousAppBrightness != null) {
+        await ScreenBrightness.instance.setApplicationScreenBrightness(
+          _previousAppBrightness!,
+        );
+      } else {
+        await ScreenBrightness.instance.resetApplicationScreenBrightness();
+      }
+    } catch (e) {
+      debugPrint('Brightness restore error: $e');
+    } finally {
+      _isBrightnessBoostActive = false;
+      _previousAppBrightness = null;
+    }
+  }
+
+  Future<void> _toggleCameraLight() async {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+
+    if (_isFrontCamera) {
+      final nextFrontLightState = !_isFrontLightOn;
+      if (nextFrontLightState) {
+        await _enableBrightnessBoost();
+      } else {
+        await _disableBrightnessBoost();
+      }
+      if (mounted) {
+        setState(() {
+          _isFrontLightOn = nextFrontLightState;
+        });
+      }
+      return;
+    }
+
+    final nextFlashState = !_isBackFlashOn;
+    try {
+      await _controller!.setFlashMode(
+        nextFlashState ? FlashMode.torch : FlashMode.off,
+      );
+      if (mounted) {
+        setState(() {
+          _isBackFlashOn = nextFlashState;
+        });
+      }
+    } catch (e) {
+      debugPrint('Flash mode error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Flash is not supported on this camera')),
+        );
+      }
+    }
   }
 
   Future<void> _scanFace() async {
@@ -442,7 +521,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Future<List<double>> _generateEmbedding(img.Image faceImage) async {
     try {
-      final faceBytes = Uint8List.fromList(img.encodeJpg(faceImage));
+      final faceBytes = Uint8List.fromList(
+        img.encodeJpg(faceImage, quality: 100),
+      );
       final embedding = await _faceEmbedder.generateEmbedding(faceBytes);
       return embedding ?? [];
     } catch (e) {
@@ -1111,6 +1192,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                     ),
                                 ),
                               ),
+                              if (_isFrontCamera && _isFrontLightOn)
+                                IgnorePointer(
+                                  child: CustomPaint(
+                                    painter: _CenterOvalFlashMaskPainter(),
+                                    child: const SizedBox.expand(),
+                                  ),
+                                ),
                               // Face Overlay
                               if (_overlayFaces.isNotEmpty &&
                                   _imageSize != null)
@@ -1212,6 +1300,30 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                     ),
                                   ),
                                 ),
+                              Positioned(
+                                top: 72,
+                                left: 12,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withAlpha(153),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: IconButton(
+                                    onPressed: _toggleCameraLight,
+                                    icon: Icon(
+                                      _isFrontCamera
+                                          ? (_isFrontLightOn
+                                              ? Icons.wb_sunny
+                                              : Icons.wb_sunny_outlined)
+                                          : (_isBackFlashOn
+                                              ? Icons.flash_on
+                                              : Icons.flash_off),
+                                      color: Colors.white,
+                                      size: 24,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           );
                         },
@@ -1502,6 +1614,32 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       ),
     );
   }
+}
+
+class _CenterOvalFlashMaskPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+
+    final layerRect = Offset.zero & size;
+    canvas.saveLayer(layerRect, Paint());
+
+    final overlayPaint = Paint()..color = Colors.white.withAlpha(245);
+    canvas.drawRect(layerRect, overlayPaint);
+
+    final ovalRect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: size.width * 0.62,
+      height: size.height * 0.72,
+    );
+
+    final clearPaint = Paint()..blendMode = BlendMode.clear;
+    canvas.drawOval(ovalRect, clearPaint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 /// Custom Painter for Face Detection Bounding Box (Spider-Man Mask Style)
